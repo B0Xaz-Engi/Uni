@@ -1,0 +1,777 @@
+if getgenv().VoidConnections then
+    for _, conn in ipairs(getgenv().VoidConnections) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+    end
+end
+getgenv().VoidConnections = {}
+
+if getgenv().VoidESPFolder then
+    pcall(function() getgenv().VoidESPFolder:Destroy() end)
+end
+
+if getgenv().VoidWindow then
+    pcall(function() getgenv().VoidWindow:Destroy() end)
+end
+
+getgenv().VoidAimState = {
+    PlayerTarget = nil,
+    HoldActive = false,
+}
+
+local function TrackConnection(conn)
+    table.insert(getgenv().VoidConnections, conn)
+    return conn
+end
+
+-- ────────────────────────────────────────────────────────────────
+-- SNAPSHOT DEFAULT LIGHTING (only on first execution)
+-- ────────────────────────────────────────────────────────────────
+
+local Lighting = game:GetService("Lighting")
+
+if not getgenv().VoidDefaultLighting then
+    getgenv().VoidDefaultLighting = {
+        FogEnd                   = Lighting.FogEnd,
+        FogStart                 = Lighting.FogStart,
+        FogColor                 = Lighting.FogColor,
+        GlobalShadows            = Lighting.GlobalShadows,
+        Ambient                  = Lighting.Ambient,
+        Brightness               = Lighting.Brightness,
+        ColorShift_Bottom        = Lighting.ColorShift_Bottom,
+        ColorShift_Top           = Lighting.ColorShift_Top,
+        EnvironmentDiffuseScale  = Lighting.EnvironmentDiffuseScale,
+        EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+        OutdoorAmbient           = Lighting.OutdoorAmbient,
+        ShadowSoftness           = Lighting.ShadowSoftness,
+        ClockTime                = Lighting.ClockTime,
+        GeographicLatitude       = Lighting.GeographicLatitude,
+        ExposureCompensation     = Lighting.ExposureCompensation,
+    }
+    print("[Void] Default lighting snapshot saved")
+end
+
+local DefaultLighting = getgenv().VoidDefaultLighting
+
+-- ────────────────────────────────────────────────────────────────
+-- RAYFIELD
+-- ────────────────────────────────────────────────────────────────
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Void",
+    LoadingTitle = "Void",
+    LoadingSubtitle = "by B0Xaz",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "Void",
+        FileName = "VoidConfig"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "noinvitelink",
+        RememberJoins = true
+    },
+    KeySystem = false,
+    Theme = {
+        TextColor = Color3.fromRGB(220, 230, 255),
+        Background = Color3.fromRGB(10, 15, 30),
+        Topbar = Color3.fromRGB(15, 20, 40),
+        Shadow = Color3.fromRGB(5, 10, 20),
+        NotificationBackground = Color3.fromRGB(15, 20, 40),
+        NotificationActionsBackground = Color3.fromRGB(0, 170, 255),
+        TabBackground = Color3.fromRGB(20, 30, 60),
+        TabStroke = Color3.fromRGB(0, 110, 200),
+        TabBackgroundSelected = Color3.fromRGB(0, 120, 255),
+        TabTextColor = Color3.fromRGB(200, 220, 255),
+        SelectedTabTextColor = Color3.fromRGB(255, 255, 255),
+        ElementBackground = Color3.fromRGB(15, 25, 50),
+        ElementBackgroundHover = Color3.fromRGB(25, 40, 80),
+        SecondaryElementBackground = Color3.fromRGB(10, 20, 40),
+        ElementStroke = Color3.fromRGB(0, 120, 255),
+        SecondaryElementStroke = Color3.fromRGB(0, 90, 180),
+        SliderBackground = Color3.fromRGB(0, 120, 255),
+        SliderProgress = Color3.fromRGB(0, 170, 255),
+        SliderStroke = Color3.fromRGB(0, 200, 255),
+        ToggleBackground = Color3.fromRGB(20, 30, 60),
+        ToggleEnabled = Color3.fromRGB(0, 170, 255),
+        ToggleDisabled = Color3.fromRGB(60, 70, 100),
+        ToggleEnabledStroke = Color3.fromRGB(0, 200, 255),
+        ToggleDisabledStroke = Color3.fromRGB(80, 90, 120),
+        ToggleEnabledOuterStroke = Color3.fromRGB(0, 120, 255),
+        ToggleDisabledOuterStroke = Color3.fromRGB(50, 60, 90),
+        DropdownSelected = Color3.fromRGB(0, 120, 255),
+        DropdownUnselected = Color3.fromRGB(15, 25, 50),
+        InputBackground = Color3.fromRGB(15, 25, 50),
+        InputStroke = Color3.fromRGB(0, 120, 255),
+        PlaceholderColor = Color3.fromRGB(150, 180, 255)
+    }
+})
+
+getgenv().VoidWindow = Window
+
+-- ────────────────────────────────────────────────────────────────
+-- Services & Variables
+-- ────────────────────────────────────────────────────────────────
+
+local camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- ────────────────────────────────────────────────────────────────
+-- Persistent State
+-- ────────────────────────────────────────────────────────────────
+
+getgenv().Aimbot = getgenv().Aimbot or {
+    Status = true,
+    Keybind = 'C',
+    Hitpart = 'HumanoidRootPart',
+    Smoothness = 1,
+    LockMode = "Toggle",
+    Prediction = {
+        Horizontal = 0.165,
+        Vertical   = 0.100,
+    }
+}
+
+getgenv().VoidFOV        = getgenv().VoidFOV        or 90
+getgenv().VoidNoclip     = getgenv().VoidNoclip     or false
+getgenv().VoidESP        = getgenv().VoidESP        or false
+getgenv().VoidFullbright = getgenv().VoidFullbright or false
+getgenv().VoidInfJump    = getgenv().VoidInfJump    or false
+getgenv().VoidSpeedValue = getgenv().VoidSpeedValue or 16
+getgenv().VoidJumpValue  = getgenv().VoidJumpValue  or 50
+
+-- ────────────────────────────────────────────────────────────────
+-- FOV Loop
+-- ────────────────────────────────────────────────────────────────
+
+TrackConnection(RunService.Heartbeat:Connect(function()
+    camera.FieldOfView = getgenv().VoidFOV
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- Aimbot Helpers
+-- ────────────────────────────────────────────────────────────────
+
+local function GetKeyCode()
+    local ok, result = pcall(function()
+        return Enum.KeyCode[getgenv().Aimbot.Keybind:upper()]
+    end)
+    return ok and result or nil
+end
+
+local function GetClosestPlayerToMouse()
+    local closestDist = math.huge
+    local closest = nil
+    for _, player in Players:GetPlayers() do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
+                if onScreen then
+                    local dist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                    if dist < closestDist then
+                        closestDist = dist
+                        closest = player
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- ────────────────────────────────────────────────────────────────
+-- Aimbot Connections
+-- ────────────────────────────────────────────────────────────────
+
+TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    local key = GetKeyCode()
+    if not key or input.KeyCode ~= key then return end
+
+    if getgenv().Aimbot.LockMode == "Hold" then
+        getgenv().VoidAimState.HoldActive = true
+        getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
+    else
+        if getgenv().VoidAimState.PlayerTarget then
+            getgenv().VoidAimState.PlayerTarget = nil
+        else
+            getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
+        end
+    end
+end))
+
+TrackConnection(UserInputService.InputEnded:Connect(function(input)
+    local key = GetKeyCode()
+    if not key or input.KeyCode ~= key then return end
+    if getgenv().Aimbot.LockMode == "Hold" then
+        getgenv().VoidAimState.HoldActive = false
+        getgenv().VoidAimState.PlayerTarget = nil
+    end
+end))
+
+TrackConnection(RunService.RenderStepped:Connect(function()
+    local state = getgenv().VoidAimState
+    if not getgenv().Aimbot.Status or not state.PlayerTarget or not state.PlayerTarget.Character then return end
+    if getgenv().Aimbot.LockMode == "Toggle" and state.HoldActive then
+        state.HoldActive = false
+    end
+
+    local hitpart = state.PlayerTarget.Character:FindFirstChild(getgenv().Aimbot.Hitpart)
+    if not hitpart then return end
+
+    local predPos = hitpart.Position + hitpart.Velocity * Vector3.new(
+        getgenv().Aimbot.Prediction.Horizontal,
+        getgenv().Aimbot.Prediction.Vertical,
+        getgenv().Aimbot.Prediction.Horizontal
+    )
+
+    local smoothFactor = 1 / getgenv().Aimbot.Smoothness
+    local targetCFrame = CFrame.new(camera.CFrame.Position, predPos)
+    camera.CFrame = camera.CFrame:Lerp(targetCFrame, smoothFactor)
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- Noclip
+-- ────────────────────────────────────────────────────────────────
+
+TrackConnection(RunService.Stepped:Connect(function()
+    if getgenv().VoidNoclip and LocalPlayer.Character then
+        for _, part in LocalPlayer.Character:GetDescendants() do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- Infinite Jump
+-- ────────────────────────────────────────────────────────────────
+
+TrackConnection(UserInputService.JumpRequest:Connect(function()
+    if getgenv().VoidInfJump and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- Fullbright
+-- ────────────────────────────────────────────────────────────────
+
+TrackConnection(RunService.Heartbeat:Connect(function()
+    if getgenv().VoidFullbright then
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Brightness = 2
+        Lighting.GlobalShadows = false
+    end
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- ESP
+-- ────────────────────────────────────────────────────────────────
+
+local ESPFolder = Instance.new("Folder", game.CoreGui)
+ESPFolder.Name = "VoidESP"
+getgenv().VoidESPFolder = ESPFolder
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    if ESPFolder:FindFirstChild("ESP_" .. player.Name) then return end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_" .. player.Name
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 120, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.Parent = ESPFolder
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(0, 200, 255)
+    label.TextStrokeTransparency = 0
+    label.Parent = billboard
+
+    TrackConnection(RunService.RenderStepped:Connect(function()
+        if not getgenv().VoidESP or not player.Character then
+            billboard.Enabled = false
+            return
+        end
+        local root = player.Character:FindFirstChild("HumanoidRootPart")
+        local hum  = player.Character:FindFirstChild("Humanoid")
+        if root and hum then
+            local dist = math.floor((root.Position - LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or root.Position).Magnitude)
+            billboard.Adornee = root
+            billboard.Enabled = true
+            label.Text = player.Name .. "\n" .. math.floor(hum.Health) .. "hp | " .. dist .. "m"
+        else
+            billboard.Enabled = false
+        end
+    end))
+end
+
+local function RemoveESP(player)
+    local existing = ESPFolder:FindFirstChild("ESP_" .. player.Name)
+    if existing then existing:Destroy() end
+end
+
+if getgenv().VoidESP then
+    for _, player in Players:GetPlayers() do
+        CreateESP(player)
+    end
+end
+
+TrackConnection(Players.PlayerAdded:Connect(function(player)
+    if getgenv().VoidESP then CreateESP(player) end
+end))
+
+TrackConnection(Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player)
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- Slider debounce helper
+-- ────────────────────────────────────────────────────────────────
+
+local sliderDebounce = {}
+
+local function SliderCallback(name, applyFn)
+    return function(Value)
+        applyFn(Value)
+        if sliderDebounce[name] then
+            task.cancel(sliderDebounce[name])
+        end
+        sliderDebounce[name] = task.delay(0.3, function()
+            print(("[Void] [Slider] %s → %s"):format(name, tostring(Value)))
+            sliderDebounce[name] = nil
+        end)
+    end
+end
+
+-- ────────────────────────────────────────────────────────────────
+-- AIM TAB
+-- ────────────────────────────────────────────────────────────────
+
+local AimTab = Window:CreateTab("Aim", "crosshair")
+
+AimTab:CreateSection("General")
+
+AimTab:CreateToggle({
+    Name = "Aimbot Enabled",
+    CurrentValue = getgenv().Aimbot.Status,
+    Callback = function(Value)
+        getgenv().Aimbot.Status = Value
+        print(("[Void] [Toggle] Aimbot Enabled → %s"):format(tostring(Value)))
+    end
+})
+
+AimTab:CreateInput({
+    Name = "Aimbot Keybind",
+    PlaceholderText = "Enter key (e.g. C)",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(Text)
+        if Text and #Text > 0 then
+            getgenv().Aimbot.Keybind = Text:sub(1,1):upper()
+            print(("[Void] [Input] Aimbot Keybind → %s"):format(getgenv().Aimbot.Keybind))
+        end
+    end
+})
+
+AimTab:CreateDropdown({
+    Name = "Hit Part",
+    Options = {"HumanoidRootPart", "Head", "UpperTorso", "LowerTorso"},
+    CurrentOption = {getgenv().Aimbot.Hitpart},
+    MultipleOptions = false,
+    Callback = function(Option)
+        getgenv().Aimbot.Hitpart = Option[1] or Option
+        print(("[Void] [Dropdown] Hit Part → %s"):format(getgenv().Aimbot.Hitpart))
+    end
+})
+
+AimTab:CreateSection("Lock Mode")
+
+AimTab:CreateDropdown({
+    Name = "Lock Mode",
+    Options = {"Toggle", "Hold"},
+    CurrentOption = {getgenv().Aimbot.LockMode},
+    MultipleOptions = false,
+    Callback = function(Option)
+        getgenv().Aimbot.LockMode = Option[1] or Option
+        getgenv().VoidAimState.HoldActive = false
+        getgenv().VoidAimState.PlayerTarget = nil
+        print(("[Void] [Dropdown] Lock Mode → %s"):format(getgenv().Aimbot.LockMode))
+    end
+})
+
+AimTab:CreateSection("Field of View")
+
+AimTab:CreateSlider({
+    Name = "Field of View",
+    Range = {70, 120},
+    Increment = 1,
+    Suffix = "°",
+    CurrentValue = getgenv().VoidFOV,
+    Callback = SliderCallback("Field of View", function(Value)
+        getgenv().VoidFOV = Value
+    end)
+})
+
+AimTab:CreateSection("Prediction")
+
+AimTab:CreateSlider({
+    Name = "Prediction Horizontal (X/Z)",
+    Range = {0, 100},
+    Increment = 1,
+    Suffix = "%",
+    CurrentValue = getgenv().Aimbot.Prediction.Horizontal * 200,
+    Callback = SliderCallback("Prediction Horizontal", function(Value)
+        getgenv().Aimbot.Prediction.Horizontal = Value / 100 * 0.5
+    end)
+})
+
+AimTab:CreateSlider({
+    Name = "Prediction Vertical (Y)",
+    Range = {0, 100},
+    Increment = 1,
+    Suffix = "%",
+    CurrentValue = getgenv().Aimbot.Prediction.Vertical * 200,
+    Callback = SliderCallback("Prediction Vertical", function(Value)
+        getgenv().Aimbot.Prediction.Vertical = Value / 100 * 0.5
+    end)
+})
+
+AimTab:CreateSection("Smoothness")
+
+AimTab:CreateSlider({
+    Name = "Smoothness",
+    Range = {1, 50},
+    Increment = 1,
+    CurrentValue = getgenv().Aimbot.Smoothness * 10,
+    Callback = SliderCallback("Smoothness", function(Value)
+        getgenv().Aimbot.Smoothness = Value / 10
+    end)
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- GRAPHICS TAB
+-- ────────────────────────────────────────────────────────────────
+
+local GraphicsTab = Window:CreateTab("Graphics", "monitor")
+
+GraphicsTab:CreateSection("Lighting Presets")
+
+GraphicsTab:CreateButton({
+    Name = "Apply Custom Lighting",
+    Icon = "sun",
+    Callback = function()
+        Lighting.FogEnd = 17000
+        Lighting.FogStart = 0
+        Lighting.FogColor = Color3.fromRGB(132, 196, 245)
+        Lighting.GlobalShadows = true
+        Lighting.Ambient = Color3.fromRGB(130, 170, 200)
+        Lighting.Brightness = 2
+        Lighting.ColorShift_Bottom = Color3.fromRGB(160, 211, 250)
+        Lighting.ColorShift_Top = Color3.fromRGB(255, 247, 237)
+        Lighting.EnvironmentDiffuseScale = 0.105
+        Lighting.EnvironmentSpecularScale = 0.522
+        Lighting.OutdoorAmbient = Color3.fromRGB(51, 54, 67)
+        Lighting.ShadowSoftness = 0.1
+        print("[Void] [Button] Apply Custom Lighting")
+        Rayfield:Notify({ Title = "Lighting Applied", Content = "Custom lighting set.", Duration = 3, Image = "sun" })
+    end
+})
+
+GraphicsTab:CreateButton({
+    Name = "Reset to Game Default",
+    Icon = "rotate-ccw",
+    Callback = function()
+        Lighting.FogEnd                   = DefaultLighting.FogEnd
+        Lighting.FogStart                 = DefaultLighting.FogStart
+        Lighting.FogColor                 = DefaultLighting.FogColor
+        Lighting.GlobalShadows            = DefaultLighting.GlobalShadows
+        Lighting.Ambient                  = DefaultLighting.Ambient
+        Lighting.Brightness               = DefaultLighting.Brightness
+        Lighting.ColorShift_Bottom        = DefaultLighting.ColorShift_Bottom
+        Lighting.ColorShift_Top           = DefaultLighting.ColorShift_Top
+        Lighting.EnvironmentDiffuseScale  = DefaultLighting.EnvironmentDiffuseScale
+        Lighting.EnvironmentSpecularScale = DefaultLighting.EnvironmentSpecularScale
+        Lighting.OutdoorAmbient           = DefaultLighting.OutdoorAmbient
+        Lighting.ShadowSoftness           = DefaultLighting.ShadowSoftness
+        Lighting.ClockTime                = DefaultLighting.ClockTime
+        Lighting.GeographicLatitude       = DefaultLighting.GeographicLatitude
+        Lighting.ExposureCompensation     = DefaultLighting.ExposureCompensation
+        print("[Void] [Button] Reset to Game Default Lighting")
+        Rayfield:Notify({ Title = "Lighting Reset", Content = "Restored to game default.", Duration = 3, Image = "rotate-ccw" })
+    end
+})
+
+GraphicsTab:CreateSection("Fullbright")
+
+GraphicsTab:CreateToggle({
+    Name = "Fullbright",
+    CurrentValue = getgenv().VoidFullbright,
+    Callback = function(Value)
+        getgenv().VoidFullbright = Value
+        if not Value then
+            Lighting.Ambient        = DefaultLighting.Ambient
+            Lighting.OutdoorAmbient = DefaultLighting.OutdoorAmbient
+            Lighting.Brightness     = DefaultLighting.Brightness
+            Lighting.GlobalShadows  = DefaultLighting.GlobalShadows
+        end
+        print(("[Void] [Toggle] Fullbright → %s"):format(tostring(Value)))
+    end
+})
+
+GraphicsTab:CreateSection("Time of Day")
+
+GraphicsTab:CreateSlider({
+    Name = "Clock Time",
+    Range = {0, 24},
+    Increment = 1,
+    Suffix = ":00",
+    CurrentValue = math.floor(Lighting.ClockTime),
+    Callback = SliderCallback("Clock Time", function(Value)
+        Lighting.ClockTime = Value
+    end)
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- MOVEMENT TAB
+-- ────────────────────────────────────────────────────────────────
+
+local MovementTab = Window:CreateTab("Movement", "zap")
+
+MovementTab:CreateSection("Speed")
+
+MovementTab:CreateSlider({
+    Name = "Walk Speed",
+    Range = {16, 150},
+    Increment = 1,
+    CurrentValue = getgenv().VoidSpeedValue,
+    Callback = SliderCallback("Walk Speed", function(Value)
+        getgenv().VoidSpeedValue = Value
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = Value
+        end
+    end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Walk Speed",
+    Callback = function()
+        getgenv().VoidSpeedValue = 16
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = 16
+        end
+        print("[Void] [Button] Reset Walk Speed")
+        Rayfield:Notify({ Title = "Speed Reset", Content = "WalkSpeed restored to 16.", Duration = 3, Image = "zap" })
+    end
+})
+
+MovementTab:CreateSection("Jump")
+
+MovementTab:CreateSlider({
+    Name = "Jump Power",
+    Range = {50, 300},
+    Increment = 1,
+    CurrentValue = getgenv().VoidJumpValue,
+    Callback = SliderCallback("Jump Power", function(Value)
+        getgenv().VoidJumpValue = Value
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = Value
+        end
+    end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Jump Power",
+    Callback = function()
+        getgenv().VoidJumpValue = 50
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = 50
+        end
+        print("[Void] [Button] Reset Jump Power")
+        Rayfield:Notify({ Title = "Jump Reset", Content = "JumpPower restored to 50.", Duration = 3, Image = "zap" })
+    end
+})
+
+MovementTab:CreateSection("Noclip")
+
+MovementTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = getgenv().VoidNoclip,
+    Callback = function(Value)
+        getgenv().VoidNoclip = Value
+        if not Value and LocalPlayer.Character then
+            for _, part in LocalPlayer.Character:GetDescendants() do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+        print(("[Void] [Toggle] Noclip → %s"):format(tostring(Value)))
+    end
+})
+
+MovementTab:CreateSection("Infinite Jump")
+
+MovementTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = getgenv().VoidInfJump,
+    Callback = function(Value)
+        getgenv().VoidInfJump = Value
+        print(("[Void] [Toggle] Infinite Jump → %s"):format(tostring(Value)))
+    end
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- TARGET TAB
+-- ────────────────────────────────────────────────────────────────
+
+local TargetTab = Window:CreateTab("Target", "user")
+
+TargetTab:CreateSection("Target Info")
+
+TargetTab:CreateButton({
+    Name = "Print Closest Player",
+    Callback = function()
+        local closestDist = math.huge
+        local closestName = "None"
+
+        for _, player in Players:GetPlayers() do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            closestName = player.Name
+                        end
+                    end
+                end
+            end
+        end
+
+        print(("[Void] [Button] Closest Player → %s (%dpx)"):format(closestName, math.floor(closestDist)))
+        Rayfield:Notify({
+            Title = "Closest Player",
+            Content = closestName .. " (" .. math.floor(closestDist) .. "px from cursor)",
+            Duration = 4,
+            Image = "user"
+        })
+    end
+})
+
+TargetTab:CreateSection("Target Actions")
+
+TargetTab:CreateButton({
+    Name = "Teleport to Target",
+    Callback = function()
+        local state = getgenv().VoidAimState
+        if state.PlayerTarget and state.PlayerTarget.Character then
+            local root = state.PlayerTarget.Character:FindFirstChild("HumanoidRootPart")
+            local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root and myRoot then
+                myRoot.CFrame = root.CFrame * CFrame.new(0, 0, 3)
+                print(("[Void] [Button] Teleported to %s"):format(state.PlayerTarget.Name))
+                Rayfield:Notify({ Title = "Teleported", Content = "Teleported to " .. state.PlayerTarget.Name, Duration = 3, Image = "user" })
+            end
+        else
+            Rayfield:Notify({ Title = "No Target", Content = "Lock onto a player first.", Duration = 3, Image = "alert-triangle" })
+        end
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Copy Target Name",
+    Callback = function()
+        local state = getgenv().VoidAimState
+        if state.PlayerTarget then
+            setclipboard(state.PlayerTarget.Name)
+            print(("[Void] [Button] Copied name: %s"):format(state.PlayerTarget.Name))
+            Rayfield:Notify({ Title = "Copied", Content = state.PlayerTarget.Name .. " copied to clipboard.", Duration = 3, Image = "clipboard" })
+        else
+            Rayfield:Notify({ Title = "No Target", Content = "Lock onto a player first.", Duration = 3, Image = "alert-triangle" })
+        end
+    end
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- VISUALS TAB
+-- ────────────────────────────────────────────────────────────────
+
+local VisualsTab = Window:CreateTab("Visuals", "eye")
+
+VisualsTab:CreateSection("ESP")
+
+VisualsTab:CreateToggle({
+    Name = "Player ESP",
+    CurrentValue = getgenv().VoidESP,
+    Callback = function(Value)
+        getgenv().VoidESP = Value
+        if Value then
+            for _, player in Players:GetPlayers() do
+                CreateESP(player)
+            end
+        else
+            for _, obj in ESPFolder:GetChildren() do
+                obj:Destroy()
+            end
+        end
+        print(("[Void] [Toggle] Player ESP → %s"):format(tostring(Value)))
+    end
+})
+
+VisualsTab:CreateSection("Character")
+
+VisualsTab:CreateButton({
+    Name = "Reset Character",
+    Callback = function()
+        LocalPlayer:LoadCharacter()
+        print("[Void] [Button] Reset Character")
+        Rayfield:Notify({ Title = "Character Reset", Content = "Your character has been reset.", Duration = 3, Image = "refresh-cw" })
+    end
+})
+
+VisualsTab:CreateSection("Camera")
+
+VisualsTab:CreateSlider({
+    Name = "Camera Zoom Max",
+    Range = {10, 500},
+    Increment = 10,
+    CurrentValue = 400,
+    Callback = SliderCallback("Camera Zoom Max", function(Value)
+        LocalPlayer.CameraMaxZoomDistance = Value
+    end)
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- Done
+-- ────────────────────────────────────────────────────────────────
+
+print("[Void] Script loaded successfully")
+
+Rayfield:Notify({
+    Title = "Void Loaded",
+    Content = "Enjoy your script!",
+    Duration = 4.5,
+    Image = "moon"
+})
