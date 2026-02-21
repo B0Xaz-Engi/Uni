@@ -638,76 +638,90 @@ end))
 local flyBodyVelocity = nil
 local flyBodyGyro     = nil
 
+local function CleanupFlyObjects()
+    if flyBodyVelocity then
+        pcall(function() flyBodyVelocity:Destroy() end)
+        flyBodyVelocity = nil
+    end
+    if flyBodyGyro then
+        pcall(function() flyBodyGyro:Destroy() end)
+        flyBodyGyro = nil
+    end
+end
+
 local function StartFly()
     if getgenv().VoidFlying then return end
-    getgenv().VoidFlying = true
     local hum  = GetHumanoid()
     local root = GetRootPart()
-    if not hum or not root then getgenv().VoidFlying = false return end
-    hum.PlatformStand = true
-
+    if not hum or not root then return end
+    CleanupFlyObjects()
+    getgenv().VoidFlying = true
+    -- No PlatformStand: it blocks IsKeyDown for WASD on many executors
     flyBodyVelocity = Instance.new("BodyVelocity")
-    flyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    flyBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
     flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
     flyBodyVelocity.Parent   = root
-
     flyBodyGyro = Instance.new("BodyGyro")
-    flyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    flyBodyGyro.Parent    = root
+    flyBodyGyro.MaxTorque    = Vector3.new(1e5, 1e5, 1e5)
+    flyBodyGyro.D            = 50
+    flyBodyGyro.P            = 1000
+    flyBodyGyro.CFrame       = root.CFrame
+    flyBodyGyro.Parent       = root
 end
 
 local function StopFly()
     if not getgenv().VoidFlying then return end
     getgenv().VoidFlying = false
-    if flyBodyVelocity then flyBodyVelocity:Destroy() flyBodyVelocity = nil end
-    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
-    task.wait()
+    CleanupFlyObjects()
+    -- Synchronous restore, no task.wait() to avoid thread timing bugs
     local hum  = GetHumanoid()
     local root = GetRootPart()
-    if hum  then hum.PlatformStand = false end
+    if hum  then hum.PlatformStand = false hum.AutoRotate = true end
     if root then
-        root.Velocity    = Vector3.new(0, 0, 0)
-        root.RotVelocity = Vector3.new(0, 0, 0)
+        pcall(function()
+            root.Velocity    = Vector3.new(0, 0, 0)
+            root.RotVelocity = Vector3.new(0, 0, 0)
+        end)
     end
 end
 
 TrackConnection(RunService.RenderStepped:Connect(function()
-    if not getgenv().VoidFlying or not flyBodyVelocity or not flyBodyGyro then return end
+    if not getgenv().VoidFlying then return end
+    -- Stop cleanly if objects were destroyed externally (e.g. respawn)
+    if not flyBodyVelocity or not flyBodyVelocity.Parent
+    or not flyBodyGyro    or not flyBodyGyro.Parent then
+        getgenv().VoidFlying = false
+        CleanupFlyObjects()
+        return
+    end
+    local root = GetRootPart()
+    if not root then StopFly() return end
     flyBodyGyro.CFrame = camera.CFrame
     local move = Vector3.new(0, 0, 0)
-
     if not IsMobile then
-        -- PC: WASD + Space/Shift
-        if UserInputService:IsKeyDown(Enum.KeyCode.W)          then move = move + camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S)          then move = move - camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A)          then move = move - camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D)          then move = move + camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space)      then move = move + Vector3.new(0, 1, 0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)  then move = move - Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.W)         then move = move + camera.CFrame.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S)         then move = move - camera.CFrame.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A)         then move = move - camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D)         then move = move + camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space)     then move = move + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
     else
-        -- Mobile: use MoveDirection from humanoid (thumbstick/tilt input)
-        local char = GetCharacter()
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                local moveDir = hum.MoveDirection
-                if moveDir.Magnitude > 0.1 then
-                    -- Project movement onto camera-relative axes
-                    local camFlat = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z).Unit
-                    local camRight = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z).Unit
-                    move = camFlat * -moveDir.Z + camRight * moveDir.X
-                end
+        local hum = GetHumanoid()
+        if hum then
+            local md = hum.MoveDirection
+            if md.Magnitude > 0.1 then
+                local fwd   = Vector3.new(camera.CFrame.LookVector.X,  0, camera.CFrame.LookVector.Z)
+                local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+                if fwd.Magnitude   > 0 then fwd   = fwd.Unit   end
+                if right.Magnitude > 0 then right = right.Unit end
+                move = fwd * -md.Z + right * md.X
             end
         end
-        -- Mobile fly up/down from on-screen hold buttons
         if getgenv().VoidMobileFlyUp   then move = move + Vector3.new(0, 1, 0) end
         if getgenv().VoidMobileFlyDown then move = move - Vector3.new(0, 1, 0) end
     end
-
-    -- Direct multiply, same as original — no Unit normalization (avoids nan on zero vector)
     flyBodyVelocity.Velocity = move * getgenv().VoidFlySpeed
 end))
-
 -- ────────────────────────────────────────────────────────────────
 -- DRAWING-BASED ESP
 -- ────────────────────────────────────────────────────────────────
