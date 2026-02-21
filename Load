@@ -1620,10 +1620,14 @@ local FlySpeedSlider = MovementTab:CreateSlider({
     end)
 })
 
+-- Guard flag: stops the toggle callback from running when we call Set() programmatically
+local flyToggleSuppressed = false
+
 local FlyToggle = MovementTab:CreateToggle({
     Name         = "Enable Fly",
     CurrentValue = false,
     Callback = function(Value)
+        if flyToggleSuppressed then return end
         if Value then
             StartFly()
             Rayfield:Notify({ Title = "Fly", Content = IsMobile and "Enabled (use mobile buttons)" or "Enabled (WASD + Space/Shift)", Duration = 3 })
@@ -1634,6 +1638,13 @@ local FlyToggle = MovementTab:CreateToggle({
     end
 })
 
+-- Helper: update the UI toggle without re-triggering StartFly/StopFly
+local function SetFlyToggleUI(value)
+    flyToggleSuppressed = true
+    FlyToggle:Set(value)
+    flyToggleSuppressed = false
+end
+
 if not IsMobile then
     MovementTab:CreateKeybind({
         Name            = "Fly Keybind (PC)",
@@ -1642,10 +1653,10 @@ if not IsMobile then
         Callback = function()
             if getgenv().VoidFlying then
                 StopFly()
-                FlyToggle:Set(false)
+                SetFlyToggleUI(false)
             else
                 StartFly()
-                FlyToggle:Set(true)
+                SetFlyToggleUI(true)
             end
         end
     })
