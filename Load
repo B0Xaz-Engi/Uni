@@ -1,3 +1,13 @@
+-- ════════════════════════════════════════════════════════════════
+-- VOID UNIVERSAL — Combined by Claude
+-- Base: Void (B0Xaz) | Merged: B0Xaz's Universal
+-- Improved: Mobile support, slider fixes, better UX
+-- ════════════════════════════════════════════════════════════════
+
+-- ────────────────────────────────────────────────────────────────
+-- CLEANUP
+-- ────────────────────────────────────────────────────────────────
+
 if getgenv().VoidConnections then
     for _, conn in ipairs(getgenv().VoidConnections) do
         if conn and conn.Connected then
@@ -15,9 +25,54 @@ if getgenv().VoidWindow then
     pcall(function() getgenv().VoidWindow:Destroy() end)
 end
 
+-- Clean up Drawing-based ESP from previous run
+if getgenv().VoidDrawingESP then
+    for _, espData in pairs(getgenv().VoidDrawingESP) do
+        for _, drawing in pairs(espData) do
+            pcall(function() drawing:Remove() end)
+        end
+    end
+end
+getgenv().VoidDrawingESP = {}
+
+if getgenv().VoidTracerLines then
+    for _, line in ipairs(getgenv().VoidTracerLines) do
+        pcall(function() line:Remove() end)
+    end
+end
+getgenv().VoidTracerLines = {}
+
+if getgenv().VoidSkeletonLines then
+    for _, lines in pairs(getgenv().VoidSkeletonLines) do
+        for _, line in ipairs(lines) do
+            pcall(function() line:Remove() end)
+        end
+    end
+end
+getgenv().VoidSkeletonLines = {}
+
+if getgenv().VoidHighlights then
+    for _, h in pairs(getgenv().VoidHighlights) do
+        pcall(function() h:Destroy() end)
+    end
+end
+getgenv().VoidHighlights = {}
+
+if getgenv().VoidFOVCircle then
+    pcall(function() getgenv().VoidFOVCircle:Remove() end)
+    getgenv().VoidFOVCircle = nil
+end
+
+-- Clean up mobile GUI from previous run
+if getgenv().VoidMobileGUI then
+    pcall(function() getgenv().VoidMobileGUI:Destroy() end)
+    getgenv().VoidMobileGUI = nil
+end
+
+-- Reset aimbot state
 getgenv().VoidAimState = {
     PlayerTarget = nil,
-    HoldActive = false,
+    HoldActive   = false,
 }
 
 local function TrackConnection(conn)
@@ -55,102 +110,228 @@ end
 local DefaultLighting = getgenv().VoidDefaultLighting
 
 -- ────────────────────────────────────────────────────────────────
+-- SERVICES & VARIABLES
+-- ────────────────────────────────────────────────────────────────
+
+local camera           = workspace.CurrentCamera
+local RunService       = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local WS               = game:GetService("Workspace")
+local GuiService       = game:GetService("GuiService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse       = LocalPlayer:GetMouse()
+
+-- ────────────────────────────────────────────────────────────────
+-- PLATFORM DETECTION
+-- ────────────────────────────────────────────────────────────────
+
+local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+-- Character references (updated on respawn)
+local function GetCharacter()    return LocalPlayer.Character end
+local function GetHumanoid()
+    local c = GetCharacter()
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function GetRootPart()
+    local c = GetCharacter()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+-- ────────────────────────────────────────────────────────────────
+-- PERSISTENT STATE
+-- ────────────────────────────────────────────────────────────────
+
+getgenv().Aimbot = getgenv().Aimbot or {
+    Status      = true,
+    Keybind     = 'C',
+    Hitpart     = 'HumanoidRootPart',
+    Smoothness  = 1,
+    LockMode    = "Toggle",
+    Prediction  = { Horizontal = 0.165, Vertical = 0.100 },
+    TeamCheck   = false,
+    VisCheck    = false,
+    MaxDistance = 200,
+    ShakeIntensity = 0,
+    AirHitpart  = "Head",
+    FOVSize     = 100,
+    ShowFOV     = false,   -- OFF by default
+    FOVFilled   = false,
+    FOVThickness = 2,
+    FOVSides    = 64,
+    RainbowFOV  = false,
+    PulseFOV    = false,
+}
+
+getgenv().VoidFOV          = getgenv().VoidFOV          or 90
+getgenv().VoidNoclip       = getgenv().VoidNoclip       or false
+getgenv().VoidESPEnabled   = getgenv().VoidESPEnabled   or false
+getgenv().VoidFullbright   = getgenv().VoidFullbright   or false
+getgenv().VoidInfJump      = getgenv().VoidInfJump      or false
+getgenv().VoidSpeedValue   = getgenv().VoidSpeedValue   or 16
+getgenv().VoidJumpValue    = getgenv().VoidJumpValue    or 50
+
+-- Drawing ESP sub-features
+getgenv().VoidESPBoxEnabled    = false
+getgenv().VoidESPNameEnabled   = false
+getgenv().VoidESPHealthEnabled = false
+getgenv().VoidESPDistEnabled   = false
+getgenv().VoidESPTracers       = false
+getgenv().VoidESPSkeleton      = false
+getgenv().VoidESPHeadDot       = false
+getgenv().VoidESPLookDir       = false
+getgenv().VoidESPTeamCheck     = false
+getgenv().VoidESPMaxDist       = 500
+getgenv().VoidESPColor         = Color3.fromRGB(0, 200, 255)
+getgenv().VoidChamsEnabled     = false
+getgenv().VoidChamsColor       = Color3.fromRGB(0, 170, 255)
+getgenv().VoidChamsOutline     = Color3.fromRGB(255, 255, 255)
+
+-- Fly state
+getgenv().VoidFlying   = getgenv().VoidFlying   or false
+getgenv().VoidFlySpeed = getgenv().VoidFlySpeed or 50
+
+-- ────────────────────────────────────────────────────────────────
 -- RAYFIELD
 -- ────────────────────────────────────────────────────────────────
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "Void",
-    LoadingTitle = "Void",
-    LoadingSubtitle = "by B0Xaz",
+    Name             = "Void Universal",
+    LoadingTitle     = "Void Universal",
+    LoadingSubtitle  = "by B0Xaz",
     ConfigurationSaving = {
-        Enabled = true,
+        Enabled    = true,
         FolderName = "Void",
-        FileName = "VoidConfig"
+        FileName   = "VoidConfig"
     },
-    Discord = {
-        Enabled = false,
-        Invite = "noinvitelink",
-        RememberJoins = true
-    },
-    KeySystem = false,
+    Discord    = { Enabled = false },
+    KeySystem  = false,
+    ToggleUIKeybind = "P",
     Theme = {
-        TextColor = Color3.fromRGB(220, 230, 255),
-        Background = Color3.fromRGB(10, 15, 30),
-        Topbar = Color3.fromRGB(15, 20, 40),
-        Shadow = Color3.fromRGB(5, 10, 20),
-        NotificationBackground = Color3.fromRGB(15, 20, 40),
+        TextColor                     = Color3.fromRGB(220, 230, 255),
+        Background                    = Color3.fromRGB(10, 15, 30),
+        Topbar                        = Color3.fromRGB(15, 20, 40),
+        Shadow                        = Color3.fromRGB(5, 10, 20),
+        NotificationBackground        = Color3.fromRGB(15, 20, 40),
         NotificationActionsBackground = Color3.fromRGB(0, 170, 255),
-        TabBackground = Color3.fromRGB(20, 30, 60),
-        TabStroke = Color3.fromRGB(0, 110, 200),
-        TabBackgroundSelected = Color3.fromRGB(0, 120, 255),
-        TabTextColor = Color3.fromRGB(200, 220, 255),
-        SelectedTabTextColor = Color3.fromRGB(255, 255, 255),
-        ElementBackground = Color3.fromRGB(15, 25, 50),
-        ElementBackgroundHover = Color3.fromRGB(25, 40, 80),
-        SecondaryElementBackground = Color3.fromRGB(10, 20, 40),
-        ElementStroke = Color3.fromRGB(0, 120, 255),
-        SecondaryElementStroke = Color3.fromRGB(0, 90, 180),
-        SliderBackground = Color3.fromRGB(0, 120, 255),
-        SliderProgress = Color3.fromRGB(0, 170, 255),
-        SliderStroke = Color3.fromRGB(0, 200, 255),
-        ToggleBackground = Color3.fromRGB(20, 30, 60),
-        ToggleEnabled = Color3.fromRGB(0, 170, 255),
-        ToggleDisabled = Color3.fromRGB(60, 70, 100),
-        ToggleEnabledStroke = Color3.fromRGB(0, 200, 255),
-        ToggleDisabledStroke = Color3.fromRGB(80, 90, 120),
-        ToggleEnabledOuterStroke = Color3.fromRGB(0, 120, 255),
-        ToggleDisabledOuterStroke = Color3.fromRGB(50, 60, 90),
-        DropdownSelected = Color3.fromRGB(0, 120, 255),
-        DropdownUnselected = Color3.fromRGB(15, 25, 50),
-        InputBackground = Color3.fromRGB(15, 25, 50),
-        InputStroke = Color3.fromRGB(0, 120, 255),
-        PlaceholderColor = Color3.fromRGB(150, 180, 255)
+        TabBackground                 = Color3.fromRGB(20, 30, 60),
+        TabStroke                     = Color3.fromRGB(0, 110, 200),
+        TabBackgroundSelected         = Color3.fromRGB(0, 120, 255),
+        TabTextColor                  = Color3.fromRGB(200, 220, 255),
+        SelectedTabTextColor          = Color3.fromRGB(255, 255, 255),
+        ElementBackground             = Color3.fromRGB(15, 25, 50),
+        ElementBackgroundHover        = Color3.fromRGB(25, 40, 80),
+        SecondaryElementBackground    = Color3.fromRGB(10, 20, 40),
+        ElementStroke                 = Color3.fromRGB(0, 120, 255),
+        SecondaryElementStroke        = Color3.fromRGB(0, 90, 180),
+        SliderBackground              = Color3.fromRGB(0, 120, 255),
+        SliderProgress                = Color3.fromRGB(0, 170, 255),
+        SliderStroke                  = Color3.fromRGB(0, 200, 255),
+        ToggleBackground              = Color3.fromRGB(20, 30, 60),
+        ToggleEnabled                 = Color3.fromRGB(0, 170, 255),
+        ToggleDisabled                = Color3.fromRGB(60, 70, 100),
+        ToggleEnabledStroke           = Color3.fromRGB(0, 200, 255),
+        ToggleDisabledStroke          = Color3.fromRGB(80, 90, 120),
+        ToggleEnabledOuterStroke      = Color3.fromRGB(0, 120, 255),
+        ToggleDisabledOuterStroke     = Color3.fromRGB(50, 60, 90),
+        DropdownSelected              = Color3.fromRGB(0, 120, 255),
+        DropdownUnselected            = Color3.fromRGB(15, 25, 50),
+        InputBackground               = Color3.fromRGB(15, 25, 50),
+        InputStroke                   = Color3.fromRGB(0, 120, 255),
+        PlaceholderColor              = Color3.fromRGB(150, 180, 255),
     }
 })
 
 getgenv().VoidWindow = Window
 
 -- ────────────────────────────────────────────────────────────────
--- Services & Variables
+-- UTILITY HELPERS
 -- ────────────────────────────────────────────────────────────────
 
-local camera = workspace.CurrentCamera
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+local function IsAlive(p)
+    local c = p.Character
+    return c
+        and c:FindFirstChild("HumanoidRootPart")
+        and c:FindFirstChild("Humanoid")
+        and c.Humanoid.Health > 0
+end
 
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
+local function SameTeam(p)
+    return LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team
+end
+
+local function IsVisible(part)
+    if not part then return true end
+    local origin    = camera.CFrame.Position
+    local direction = part.Position - origin
+    local params    = RaycastParams.new()
+    params.FilterDescendantsInstances = { LocalPlayer.Character, camera }
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+    local result = WS:Raycast(origin, direction, params)
+    return not result or result.Instance:IsDescendantOf(part.Parent)
+end
+
+local function GetPlayerByName(name)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name == name then return p end
+    end
+    return nil
+end
+
+local function GetPlayerList()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(list, p.Name) end
+    end
+    return list
+end
+
+-- Slider: only notify after user releases (debounce 0.5s)
+local sliderDebounce = {}
+local function SliderCallback(name, applyFn)
+    return function(Value)
+        applyFn(Value)
+        if sliderDebounce[name] then task.cancel(sliderDebounce[name]) end
+        sliderDebounce[name] = task.delay(0.5, function()
+            Rayfield:Notify({
+                Title   = name,
+                Content = "Set to: " .. tostring(Value),
+                Duration = 2,
+            })
+            sliderDebounce[name] = nil
+        end)
+    end
+end
+
+-- Apply speed/jump to current and future humanoids
+local function ApplyStats()
+    local hum = GetHumanoid()
+    if hum then
+        hum.WalkSpeed = getgenv().VoidSpeedValue
+        hum.JumpPower = getgenv().VoidJumpValue
+    end
+end
+
+TrackConnection(LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5) -- wait for humanoid to load
+    ApplyStats()
+    -- Re-init ESP for existing players
+    for _, player in Players:GetPlayers() do
+        if player ~= LocalPlayer then
+            AddDrawingESP(player)
+            AddSkeleton(player)
+        end
+    end
+end))
 
 -- ────────────────────────────────────────────────────────────────
--- Persistent State
--- ────────────────────────────────────────────────────────────────
-
-getgenv().Aimbot = getgenv().Aimbot or {
-    Status = true,
-    Keybind = 'C',
-    Hitpart = 'HumanoidRootPart',
-    Smoothness = 1,
-    LockMode = "Toggle",
-    Prediction = {
-        Horizontal = 0.165,
-        Vertical   = 0.100,
-    }
-}
-
-getgenv().VoidFOV        = getgenv().VoidFOV        or 90
-getgenv().VoidNoclip     = getgenv().VoidNoclip     or false
-getgenv().VoidESP        = getgenv().VoidESP        or false
-getgenv().VoidFullbright = getgenv().VoidFullbright or false
-getgenv().VoidInfJump    = getgenv().VoidInfJump    or false
-getgenv().VoidSpeedValue = getgenv().VoidSpeedValue or 16
-getgenv().VoidJumpValue  = getgenv().VoidJumpValue  or 50
-
--- ────────────────────────────────────────────────────────────────
--- FOV Loop
+-- FOV LOOP
 -- ────────────────────────────────────────────────────────────────
 
 TrackConnection(RunService.Heartbeat:Connect(function()
@@ -158,29 +339,46 @@ TrackConnection(RunService.Heartbeat:Connect(function()
 end))
 
 -- ────────────────────────────────────────────────────────────────
--- Aimbot Helpers
+-- AIMBOT HELPERS
 -- ────────────────────────────────────────────────────────────────
 
-local function GetKeyCode()
+local function GetKeyCode(keyStr)
     local ok, result = pcall(function()
-        return Enum.KeyCode[getgenv().Aimbot.Keybind:upper()]
+        return Enum.KeyCode[keyStr:upper()]
     end)
     return ok and result or nil
 end
 
 local function GetClosestPlayerToMouse()
     local closestDist = math.huge
-    local closest = nil
+    local closest     = nil
+    local myRoot      = GetRootPart()
+    local myPos       = myRoot and myRoot.Position
+
+    -- On mobile, use screen center instead of mouse position
+    local targetPos
+    if IsMobile then
+        targetPos = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    else
+        targetPos = Vector2.new(Mouse.X, Mouse.Y)
+    end
+
     for _, player in Players:GetPlayers() do
-        if player ~= LocalPlayer and player.Character then
-            local root = player.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
-                if onScreen then
-                    local dist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-                    if dist < closestDist then
-                        closestDist = dist
-                        closest = player
+        if player ~= LocalPlayer and IsAlive(player) then
+            if not (getgenv().Aimbot.TeamCheck and SameTeam(player)) then
+                local char = player.Character
+                local part = char:FindFirstChild(getgenv().Aimbot.Hitpart) or char:FindFirstChild("HumanoidRootPart")
+                if part then
+                    if myPos and (myPos - part.Position).Magnitude > getgenv().Aimbot.MaxDistance then continue end
+                    local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+                    if onScreen then
+                        local dist = (targetPos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                        if dist < closestDist and dist <= getgenv().Aimbot.FOVSize then
+                            if not getgenv().Aimbot.VisCheck or IsVisible(part) then
+                                closestDist = dist
+                                closest     = player
+                            end
+                        end
                     end
                 end
             end
@@ -190,16 +388,18 @@ local function GetClosestPlayerToMouse()
 end
 
 -- ────────────────────────────────────────────────────────────────
--- Aimbot Connections
+-- AIMBOT INPUT (PC keybinds)
 -- ────────────────────────────────────────────────────────────────
 
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    local key = GetKeyCode()
+    if not getgenv().Aimbot.Status then return end
+    if IsMobile then return end  -- mobile uses on-screen button
+    local key = GetKeyCode(getgenv().Aimbot.Keybind)
     if not key or input.KeyCode ~= key then return end
 
     if getgenv().Aimbot.LockMode == "Hold" then
-        getgenv().VoidAimState.HoldActive = true
+        getgenv().VoidAimState.HoldActive   = true
         getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
     else
         if getgenv().VoidAimState.PlayerTarget then
@@ -211,22 +411,40 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
 end))
 
 TrackConnection(UserInputService.InputEnded:Connect(function(input)
-    local key = GetKeyCode()
+    if IsMobile then return end
+    local key = GetKeyCode(getgenv().Aimbot.Keybind)
     if not key or input.KeyCode ~= key then return end
     if getgenv().Aimbot.LockMode == "Hold" then
-        getgenv().VoidAimState.HoldActive = false
+        getgenv().VoidAimState.HoldActive   = false
         getgenv().VoidAimState.PlayerTarget = nil
     end
 end))
 
+-- ────────────────────────────────────────────────────────────────
+-- AIMBOT RENDER LOOP
+-- ────────────────────────────────────────────────────────────────
+
 TrackConnection(RunService.RenderStepped:Connect(function()
     local state = getgenv().VoidAimState
-    if not getgenv().Aimbot.Status or not state.PlayerTarget or not state.PlayerTarget.Character then return end
+    if not getgenv().Aimbot.Status then return end
+    if not state.PlayerTarget then return end
+
+    local char = state.PlayerTarget.Character
+    if not char then
+        state.PlayerTarget = nil
+        return
+    end
+
     if getgenv().Aimbot.LockMode == "Toggle" and state.HoldActive then
         state.HoldActive = false
     end
 
-    local hitpart = state.PlayerTarget.Character:FindFirstChild(getgenv().Aimbot.Hitpart)
+    local hum      = char:FindFirstChildOfClass("Humanoid")
+    local partName = getgenv().Aimbot.Hitpart
+    if hum and hum.FloorMaterial == Enum.Material.Air then
+        partName = getgenv().Aimbot.AirHitpart
+    end
+    local hitpart = char:FindFirstChild(partName)
     if not hitpart then return end
 
     local predPos = hitpart.Position + hitpart.Velocity * Vector3.new(
@@ -235,134 +453,752 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         getgenv().Aimbot.Prediction.Horizontal
     )
 
-    local smoothFactor = 1 / getgenv().Aimbot.Smoothness
-    local targetCFrame = CFrame.new(camera.CFrame.Position, predPos)
-    camera.CFrame = camera.CFrame:Lerp(targetCFrame, smoothFactor)
+    if getgenv().Aimbot.ShakeIntensity and getgenv().Aimbot.ShakeIntensity > 0 then
+        local s = getgenv().Aimbot.ShakeIntensity / 10
+        predPos = predPos + Vector3.new(
+            math.random() * s * 2 - s,
+            math.random() * s * 2 - s,
+            0
+        )
+    end
+
+    local screenPos = camera:WorldToViewportPoint(predPos)
+    local mousePos  = UserInputService:GetMouseLocation()
+    local delta     = Vector2.new(screenPos.X, screenPos.Y) - mousePos
+    delta           = delta / getgenv().Aimbot.Smoothness
+
+    local ok = pcall(function()
+        mousemoverel(delta.X, delta.Y)
+    end)
+    if not ok then
+        local smoothFactor = 1 / math.max(getgenv().Aimbot.Smoothness, 1)
+        local targetCFrame = CFrame.new(camera.CFrame.Position, predPos)
+        camera.CFrame      = camera.CFrame:Lerp(targetCFrame, smoothFactor)
+    end
 end))
 
 -- ────────────────────────────────────────────────────────────────
--- Noclip
+-- FOV CIRCLE (Drawing API)
+-- ────────────────────────────────────────────────────────────────
+
+local FOVCircleOk, FOVCircle = pcall(function()
+    local c = Drawing.new("Circle")
+    c.Visible      = false
+    c.Radius       = 100
+    c.Color        = Color3.fromRGB(0, 200, 255)
+    c.Thickness    = 2
+    c.Filled       = false
+    c.Transparency = 1
+    c.NumSides     = 64
+    return c
+end)
+
+if not FOVCircleOk then FOVCircle = nil end
+getgenv().VoidFOVCircle = FOVCircle
+
+local fovHue   = 0
+local fovPulse = 0
+
+TrackConnection(RunService.RenderStepped:Connect(function(dt)
+    if not FOVCircle then return end
+
+    if IsMobile then
+        -- On mobile, center the FOV circle on screen
+        FOVCircle.Position = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    else
+        local mPos = UserInputService:GetMouseLocation()
+        FOVCircle.Position = mPos
+    end
+
+    if getgenv().Aimbot.RainbowFOV then
+        fovHue = (fovHue + dt * 0.5) % 1
+        FOVCircle.Color = Color3.fromHSV(fovHue, 1, 1)
+    else
+        FOVCircle.Color = getgenv().VoidESPColor
+    end
+
+    if getgenv().Aimbot.PulseFOV then
+        fovPulse = fovPulse + dt * 3
+        FOVCircle.Radius = getgenv().Aimbot.FOVSize + math.sin(fovPulse) * 20
+    else
+        FOVCircle.Radius = getgenv().Aimbot.FOVSize
+    end
+
+    FOVCircle.Thickness = getgenv().Aimbot.FOVThickness
+    FOVCircle.Filled    = getgenv().Aimbot.FOVFilled
+    FOVCircle.Visible   = getgenv().Aimbot.ShowFOV and getgenv().Aimbot.Status
+    FOVCircle.NumSides  = getgenv().Aimbot.FOVSides
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- NOCLIP
 -- ────────────────────────────────────────────────────────────────
 
 TrackConnection(RunService.Stepped:Connect(function()
-    if getgenv().VoidNoclip and LocalPlayer.Character then
-        for _, part in LocalPlayer.Character:GetDescendants() do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
+    if getgenv().VoidNoclip then
+        local char = GetCharacter()
+        if char then
+            for _, part in char:GetDescendants() do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
             end
         end
     end
 end))
 
 -- ────────────────────────────────────────────────────────────────
--- Infinite Jump
+-- INFINITE JUMP
 -- ────────────────────────────────────────────────────────────────
 
 TrackConnection(UserInputService.JumpRequest:Connect(function()
-    if getgenv().VoidInfJump and LocalPlayer.Character then
-        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
+    if getgenv().VoidInfJump then
+        local hum = GetHumanoid()
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end))
 
 -- ────────────────────────────────────────────────────────────────
--- Fullbright
+-- FULLBRIGHT
 -- ────────────────────────────────────────────────────────────────
 
 TrackConnection(RunService.Heartbeat:Connect(function()
     if getgenv().VoidFullbright then
-        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.Ambient        = Color3.fromRGB(255, 255, 255)
         Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-        Lighting.Brightness = 2
-        Lighting.GlobalShadows = false
+        Lighting.Brightness     = 2
+        Lighting.GlobalShadows  = false
     end
 end))
 
 -- ────────────────────────────────────────────────────────────────
--- ESP
+-- FLY
 -- ────────────────────────────────────────────────────────────────
 
-local ESPFolder = Instance.new("Folder", game.CoreGui)
-ESPFolder.Name = "VoidESP"
-getgenv().VoidESPFolder = ESPFolder
+local flyBodyVelocity = nil
+local flyBodyGyro     = nil
 
-local function CreateESP(player)
+local function StartFly()
+    if getgenv().VoidFlying then return end
+    getgenv().VoidFlying = true
+    local hum  = GetHumanoid()
+    local root = GetRootPart()
+    if not hum or not root then getgenv().VoidFlying = false return end
+    hum.PlatformStand = true
+
+    flyBodyVelocity = Instance.new("BodyVelocity")
+    flyBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    flyBodyVelocity.Parent   = root
+
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    flyBodyGyro.Parent    = root
+end
+
+local function StopFly()
+    if not getgenv().VoidFlying then return end
+    getgenv().VoidFlying = false
+    if flyBodyVelocity then flyBodyVelocity:Destroy() flyBodyVelocity = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy() flyBodyGyro = nil end
+    task.wait()
+    local hum  = GetHumanoid()
+    local root = GetRootPart()
+    if hum  then hum.PlatformStand = false end
+    if root then
+        root.Velocity    = Vector3.new(0, 0, 0)
+        root.RotVelocity = Vector3.new(0, 0, 0)
+    end
+end
+
+TrackConnection(RunService.RenderStepped:Connect(function()
+    if not getgenv().VoidFlying or not flyBodyVelocity or not flyBodyGyro then return end
+    flyBodyGyro.CFrame = camera.CFrame
+    local move = Vector3.new(0, 0, 0)
+
+    if not IsMobile then
+        -- PC: WASD + Space/Shift
+        if UserInputService:IsKeyDown(Enum.KeyCode.W)          then move = move + camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S)          then move = move - camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A)          then move = move - camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D)          then move = move + camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space)      then move = move + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)  then move = move - Vector3.new(0, 1, 0) end
+    else
+        -- Mobile: use thumbstick / default walk movement direction from camera + character
+        local char = GetCharacter()
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hrp and hum then
+                local moveDir = hum.MoveDirection
+                if moveDir.Magnitude > 0.1 then
+                    move = camera.CFrame.LookVector * moveDir.Z + camera.CFrame.RightVector * moveDir.X
+                end
+            end
+        end
+        -- Mobile fly up/down handled by mobile buttons (see MobileFlyUp/Down below)
+        if getgenv().VoidMobileFlyUp   then move = move + Vector3.new(0, 1, 0) end
+        if getgenv().VoidMobileFlyDown then move = move - Vector3.new(0, 1, 0) end
+    end
+
+    flyBodyVelocity.Velocity = move.Magnitude > 0 and move.Unit * getgenv().VoidFlySpeed or Vector3.new(0, 0, 0)
+end))
+
+-- ────────────────────────────────────────────────────────────────
+-- DRAWING-BASED ESP
+-- ────────────────────────────────────────────────────────────────
+
+local DrawingESP    = getgenv().VoidDrawingESP
+local TracerLines   = getgenv().VoidTracerLines
+local SkeletonLines = getgenv().VoidSkeletonLines
+local Highlights    = getgenv().VoidHighlights
+
+local drawingAvailable = pcall(function() local _ = Drawing end)
+
+function AddDrawingESP(player)
     if player == LocalPlayer then return end
-    if ESPFolder:FindFirstChild("ESP_" .. player.Name) then return end
+    if DrawingESP[player] then return end
+    if not drawingAvailable then return end
 
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "ESP_" .. player.Name
-    billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 120, 0, 50)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.Parent = ESPFolder
+    local ok, result = pcall(function()
+        return {
+            Box      = Drawing.new("Square"),
+            Name     = Drawing.new("Text"),
+            Health   = Drawing.new("Square"),
+            HealthBG = Drawing.new("Square"),
+            Distance = Drawing.new("Text"),
+            HeadDot  = Drawing.new("Circle"),
+            LookLine = Drawing.new("Line"),
+        }
+    end)
+    if not ok then return end
+    local d = result
 
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 14
-    label.TextColor3 = Color3.fromRGB(0, 200, 255)
-    label.TextStrokeTransparency = 0
-    label.Parent = billboard
+    d.Box.Thickness, d.Box.Filled, d.Box.Transparency, d.Box.Visible = 2, false, 1, false
+    d.Name.Size, d.Name.Center, d.Name.Outline, d.Name.Font, d.Name.Visible = 16, true, true, 2, false
+    d.HealthBG.Filled, d.HealthBG.Visible = true, false
+    d.Health.Filled, d.Health.Visible = true, false
+    d.Distance.Size, d.Distance.Center, d.Distance.Outline, d.Distance.Font, d.Distance.Visible = 14, true, true, 2, false
+    d.HeadDot.Radius, d.HeadDot.Filled, d.HeadDot.Visible = 4, true, false
+    d.LookLine.Thickness, d.LookLine.Visible = 2, false
 
-    TrackConnection(RunService.RenderStepped:Connect(function()
-        if not getgenv().VoidESP or not player.Character then
-            billboard.Enabled = false
-            return
+    DrawingESP[player] = d
+end
+
+local function RemoveDrawingESP(player)
+    if DrawingESP[player] then
+        for _, v in pairs(DrawingESP[player]) do pcall(v.Remove, v) end
+        DrawingESP[player] = nil
+    end
+end
+
+function AddSkeleton(player)
+    if SkeletonLines[player] then return end
+    if not drawingAvailable then return end
+    local lines = {}
+    for i = 1, 6 do
+        local ok, line = pcall(function()
+            local l = Drawing.new("Line")
+            l.Thickness, l.Visible, l.Transparency = 1, false, 1
+            return l
+        end)
+        if ok then table.insert(lines, line) end
+    end
+    SkeletonLines[player] = lines
+end
+
+local function RemoveSkeleton(player)
+    if SkeletonLines[player] then
+        for _, l in ipairs(SkeletonLines[player]) do pcall(l.Remove, l) end
+        SkeletonLines[player] = nil
+    end
+end
+
+local function AddHighlight(player)
+    if Highlights[player] or not player.Character then return end
+    local h = Instance.new("Highlight")
+    h.Adornee          = player.Character
+    h.FillColor        = getgenv().VoidChamsColor
+    h.OutlineColor     = getgenv().VoidChamsOutline
+    h.FillTransparency = 0.5
+    h.Parent           = player.Character
+    Highlights[player] = h
+end
+
+local function RemoveHighlight(player)
+    if Highlights[player] then
+        pcall(function() Highlights[player]:Destroy() end)
+        Highlights[player] = nil
+    end
+end
+
+local function UpdateDrawingESP()
+    for _, l in ipairs(TracerLines) do pcall(l.Remove, l) end
+    TracerLines = {}
+    getgenv().VoidTracerLines = TracerLines
+
+    local myRoot = GetRootPart()
+    local myPos  = myRoot and myRoot.Position
+
+    for player, d in pairs(DrawingESP) do
+        local shouldShow = getgenv().VoidESPEnabled
+            and IsAlive(player)
+            and not (getgenv().VoidESPTeamCheck and SameTeam(player))
+
+        if not shouldShow then
+            for _, v in pairs(d) do v.Visible = false end
+            if SkeletonLines[player] then
+                for _, l in ipairs(SkeletonLines[player]) do l.Visible = false end
+            end
+            RemoveHighlight(player)
+            continue
         end
-        local root = player.Character:FindFirstChild("HumanoidRootPart")
-        local hum  = player.Character:FindFirstChild("Humanoid")
-        if root and hum then
-            local dist = math.floor((root.Position - LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or root.Position).Magnitude)
-            billboard.Adornee = root
-            billboard.Enabled = true
-            label.Text = player.Name .. "\n" .. math.floor(hum.Health) .. "hp | " .. dist .. "m"
+
+        local char = player.Character
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local head = char:FindFirstChild("Head")
+        local hum  = char:FindFirstChildOfClass("Humanoid")
+
+        if not root or not head or not hum then
+            for _, v in pairs(d) do v.Visible = false end
+            continue
+        end
+
+        local dist3d = myPos and (myPos - root.Position).Magnitude or 0
+        if dist3d > getgenv().VoidESPMaxDist then
+            for _, v in pairs(d) do v.Visible = false end
+            continue
+        end
+
+        local rPos, onScreen = camera:WorldToViewportPoint(root.Position)
+        local hPos = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+        local lPos = camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+
+        if not onScreen then
+            for _, v in pairs(d) do v.Visible = false end
+            if SkeletonLines[player] then
+                for _, l in ipairs(SkeletonLines[player]) do l.Visible = false end
+            end
+            continue
+        end
+
+        local height = math.abs(hPos.Y - lPos.Y)
+        local width  = height / 2
+        local col    = getgenv().VoidESPColor
+
+        d.Box.Color, d.Name.Color, d.Distance.Color = col, col, col
+        d.HeadDot.Color, d.LookLine.Color = col, col
+
+        d.Box.Visible = getgenv().VoidESPBoxEnabled
+        if getgenv().VoidESPBoxEnabled then
+            d.Box.Size     = Vector2.new(width, height)
+            d.Box.Position = Vector2.new(rPos.X - width / 2, rPos.Y - height / 2)
+        end
+
+        d.Name.Visible = getgenv().VoidESPNameEnabled
+        if getgenv().VoidESPNameEnabled then
+            d.Name.Text     = player.DisplayName or player.Name
+            d.Name.Position = Vector2.new(rPos.X, hPos.Y - 30)
+        end
+
+        if getgenv().VoidESPHealthEnabled then
+            local ratio = hum.Health / math.max(hum.MaxHealth, 1)
+            d.HealthBG.Size     = Vector2.new(4, height)
+            d.HealthBG.Position = Vector2.new(rPos.X - width / 2 - 8, rPos.Y - height / 2)
+            d.HealthBG.Color, d.HealthBG.Transparency, d.HealthBG.Visible = Color3.new(0, 0, 0), 0.5, true
+            d.Health.Size     = Vector2.new(4, height * ratio)
+            d.Health.Position = d.HealthBG.Position + Vector2.new(0, height * (1 - ratio))
+            d.Health.Color, d.Health.Visible = Color3.fromHSV(ratio / 3, 1, 1), true
         else
-            billboard.Enabled = false
+            d.Health.Visible, d.HealthBG.Visible = false, false
         end
-    end))
+
+        d.Distance.Visible = getgenv().VoidESPDistEnabled
+        if getgenv().VoidESPDistEnabled then
+            d.Distance.Text     = math.floor(dist3d) .. " studs"
+            d.Distance.Position = Vector2.new(rPos.X, lPos.Y + 5)
+        end
+
+        d.HeadDot.Visible = getgenv().VoidESPHeadDot
+        if getgenv().VoidESPHeadDot then
+            d.HeadDot.Position = Vector2.new(hPos.X, hPos.Y)
+        end
+
+        if getgenv().VoidESPLookDir then
+            local lookWorld = camera:WorldToViewportPoint(head.Position + head.CFrame.LookVector * 5)
+            d.LookLine.From, d.LookLine.To, d.LookLine.Visible =
+                Vector2.new(hPos.X, hPos.Y), Vector2.new(lookWorld.X, lookWorld.Y), true
+        else
+            d.LookLine.Visible = false
+        end
+
+        if getgenv().VoidESPTracers and drawingAvailable then
+            local ok, tracer = pcall(function()
+                local t = Drawing.new("Line")
+                t.From      = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                t.To        = Vector2.new(rPos.X, rPos.Y)
+                t.Color     = col
+                t.Thickness = 1.5
+                t.Visible   = true
+                return t
+            end)
+            if ok then table.insert(TracerLines, tracer) end
+        end
+
+        if getgenv().VoidESPSkeleton and SkeletonLines[player] then
+            local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+            local lower = char:FindFirstChild("LowerTorso") or torso
+            local la    = char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("Left Arm")
+            local ra    = char:FindFirstChild("RightUpperArm") or char:FindFirstChild("Right Arm")
+            local ll    = char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("Left Leg")
+            local rl    = char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("Right Leg")
+            local bones = {{head, torso}, {torso, lower}, {torso, la}, {torso, ra}, {lower, ll}, {lower, rl}}
+            for i, v in ipairs(bones) do
+                local sl = SkeletonLines[player][i]
+                if sl and v[1] and v[2] then
+                    local a = camera:WorldToViewportPoint(v[1].Position)
+                    local b = camera:WorldToViewportPoint(v[2].Position)
+                    if a.Z > 0 and b.Z > 0 then
+                        sl.From, sl.To  = Vector2.new(a.X, a.Y), Vector2.new(b.X, b.Y)
+                        sl.Color        = col
+                        sl.Visible      = true
+                    else
+                        sl.Visible = false
+                    end
+                elseif sl then
+                    sl.Visible = false
+                end
+            end
+        elseif SkeletonLines[player] then
+            for _, l in ipairs(SkeletonLines[player]) do l.Visible = false end
+        end
+
+        if getgenv().VoidChamsEnabled then
+            if not Highlights[player] then AddHighlight(player) end
+            if Highlights[player] then
+                Highlights[player].FillColor    = getgenv().VoidChamsColor
+                Highlights[player].OutlineColor = getgenv().VoidChamsOutline
+            end
+        else
+            RemoveHighlight(player)
+        end
+    end
 end
 
-local function RemoveESP(player)
-    local existing = ESPFolder:FindFirstChild("ESP_" .. player.Name)
-    if existing then existing:Destroy() end
-end
-
-if getgenv().VoidESP then
-    for _, player in Players:GetPlayers() do
-        CreateESP(player)
+for _, player in Players:GetPlayers() do
+    if player ~= LocalPlayer then
+        AddDrawingESP(player)
+        AddSkeleton(player)
     end
 end
 
 TrackConnection(Players.PlayerAdded:Connect(function(player)
-    if getgenv().VoidESP then CreateESP(player) end
+    AddDrawingESP(player)
+    AddSkeleton(player)
+    player.CharacterAdded:Connect(function()
+        task.wait(0.2)
+        AddDrawingESP(player)
+        AddSkeleton(player)
+    end)
 end))
 
 TrackConnection(Players.PlayerRemoving:Connect(function(player)
-    RemoveESP(player)
+    RemoveDrawingESP(player)
+    RemoveSkeleton(player)
+    RemoveHighlight(player)
 end))
 
--- ────────────────────────────────────────────────────────────────
--- Slider debounce helper
--- ────────────────────────────────────────────────────────────────
-
-local sliderDebounce = {}
-
-local function SliderCallback(name, applyFn)
-    return function(Value)
-        applyFn(Value)
-        if sliderDebounce[name] then
-            task.cancel(sliderDebounce[name])
-        end
-        sliderDebounce[name] = task.delay(0.3, function()
-            print(("[Void] [Slider] %s → %s"):format(name, tostring(Value)))
-            sliderDebounce[name] = nil
-        end)
+TrackConnection(RunService.RenderStepped:Connect(function()
+    if getgenv().VoidESPEnabled then
+        UpdateDrawingESP()
     end
+end))
+
+-- ════════════════════════════════════════════════════════════════
+-- MOBILE GUI
+-- ════════════════════════════════════════════════════════════════
+
+getgenv().VoidMobileFlyUp   = false
+getgenv().VoidMobileFlyDown = false
+
+local function CreateMobileGUI()
+    -- Remove existing
+    local existingGui = LocalPlayer.PlayerGui:FindFirstChild("VoidMobile")
+    if existingGui then existingGui:Destroy() end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name            = "VoidMobile"
+    screenGui.ResetOnSpawn    = false
+    screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+    screenGui.DisplayOrder    = 999
+    screenGui.Parent          = LocalPlayer.PlayerGui
+    getgenv().VoidMobileGUI   = screenGui
+
+    -- Helper to create a button
+    local function MakeButton(parent, text, xPos, yPos, width, height, bgColor)
+        local frame = Instance.new("Frame")
+        frame.Size            = UDim2.new(0, width, 0, height)
+        frame.Position        = UDim2.new(xPos, 0, yPos, 0)
+        frame.BackgroundColor3 = bgColor or Color3.fromRGB(10, 20, 50)
+        frame.BorderSizePixel = 0
+        frame.Parent          = parent
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent       = frame
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color     = Color3.fromRGB(0, 170, 255)
+        stroke.Thickness = 1.5
+        stroke.Parent    = frame
+
+        local label = Instance.new("TextLabel")
+        label.Size            = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text            = text
+        label.TextColor3      = Color3.fromRGB(220, 235, 255)
+        label.TextScaled      = true
+        label.Font            = Enum.Font.GothamBold
+        label.Parent          = frame
+
+        return frame, label
+    end
+
+    -- Panel background
+    local panel = Instance.new("Frame")
+    panel.Name              = "VoidMobilePanel"
+    panel.Size              = UDim2.new(0, 220, 0, 320)
+    panel.Position          = UDim2.new(0, 10, 0.5, -160)
+    panel.BackgroundColor3  = Color3.fromRGB(8, 12, 28)
+    panel.BorderSizePixel   = 0
+    panel.Active            = true
+    panel.Draggable         = true
+    panel.Parent            = screenGui
+
+    local panelCorner = Instance.new("UICorner")
+    panelCorner.CornerRadius = UDim.new(0, 12)
+    panelCorner.Parent       = panel
+
+    local panelStroke = Instance.new("UIStroke")
+    panelStroke.Color     = Color3.fromRGB(0, 120, 255)
+    panelStroke.Thickness = 2
+    panelStroke.Parent    = panel
+
+    local title = Instance.new("TextLabel")
+    title.Size               = UDim2.new(1, 0, 0, 36)
+    title.BackgroundColor3   = Color3.fromRGB(0, 80, 200)
+    title.BorderSizePixel    = 0
+    title.Text               = "⚡ Void Mobile"
+    title.TextColor3         = Color3.fromRGB(255, 255, 255)
+    title.TextScaled         = true
+    title.Font               = Enum.Font.GothamBold
+    title.Parent             = panel
+
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 10)
+    titleCorner.Parent       = title
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding         = UDim.new(0, 6)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Parent          = panel
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop   = UDim.new(0, 42)
+    padding.PaddingLeft  = UDim.new(0, 8)
+    padding.PaddingRight = UDim.new(0, 8)
+    padding.Parent       = panel
+
+    -- Toggle button helper (returns frame, label, state table)
+    local function MakeToggleBtn(text, initState)
+        local btn = Instance.new("TextButton")
+        btn.Size              = UDim2.new(1, 0, 0, 38)
+        btn.BackgroundColor3  = initState and Color3.fromRGB(0, 100, 220) or Color3.fromRGB(15, 25, 55)
+        btn.BorderSizePixel   = 0
+        btn.Text              = text .. (initState and " ✓" or "")
+        btn.TextColor3        = Color3.fromRGB(220, 235, 255)
+        btn.TextScaled        = true
+        btn.Font              = Enum.Font.GothamSemibold
+        btn.Parent            = panel
+
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 8)
+        c.Parent       = btn
+
+        local s = Instance.new("UIStroke")
+        s.Color     = Color3.fromRGB(0, 150, 255)
+        s.Thickness = 1
+        s.Parent    = btn
+
+        local state = { active = initState }
+        return btn, state
+    end
+
+    -- AIMBOT TOGGLE
+    local aimBtn, aimState = MakeToggleBtn("🎯 Aimbot", getgenv().Aimbot.Status)
+    aimState.active = getgenv().Aimbot.Status
+    aimBtn.MouseButton1Click:Connect(function()
+        aimState.active = not aimState.active
+        getgenv().Aimbot.Status = aimState.active
+        if not aimState.active then
+            getgenv().VoidAimState.PlayerTarget = nil
+        end
+        aimBtn.BackgroundColor3 = aimState.active and Color3.fromRGB(0, 100, 220) or Color3.fromRGB(15, 25, 55)
+        aimBtn.Text = "🎯 Aimbot" .. (aimState.active and " ✓" or "")
+    end)
+
+    -- AIMBOT LOCK BUTTON (tap to lock/unlock)
+    local lockBtn = Instance.new("TextButton")
+    lockBtn.Size             = UDim2.new(1, 0, 0, 38)
+    lockBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 0)
+    lockBtn.BorderSizePixel  = 0
+    lockBtn.Text             = "🔒 Lock Target"
+    lockBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+    lockBtn.TextScaled       = true
+    lockBtn.Font             = Enum.Font.GothamBold
+    lockBtn.Parent           = panel
+
+    local lockBtnCorner = Instance.new("UICorner")
+    lockBtnCorner.CornerRadius = UDim.new(0, 8)
+    lockBtnCorner.Parent       = lockBtn
+
+    lockBtn.MouseButton1Click:Connect(function()
+        if not getgenv().Aimbot.Status then return end
+        if getgenv().VoidAimState.PlayerTarget then
+            getgenv().VoidAimState.PlayerTarget = nil
+            lockBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 0)
+            lockBtn.Text = "🔒 Lock Target"
+        else
+            getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
+            if getgenv().VoidAimState.PlayerTarget then
+                lockBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 50)
+                lockBtn.Text = "🔓 " .. getgenv().VoidAimState.PlayerTarget.Name
+            end
+        end
+    end)
+
+    -- ESP TOGGLE
+    local espBtn, espState = MakeToggleBtn("👁 ESP", getgenv().VoidESPEnabled)
+    espState.active = getgenv().VoidESPEnabled
+    espBtn.MouseButton1Click:Connect(function()
+        espState.active = not espState.active
+        getgenv().VoidESPEnabled = espState.active
+        espBtn.BackgroundColor3 = espState.active and Color3.fromRGB(0, 100, 220) or Color3.fromRGB(15, 25, 55)
+        espBtn.Text = "👁 ESP" .. (espState.active and " ✓" or "")
+    end)
+
+    -- NOCLIP TOGGLE
+    local noclipBtn, noclipState = MakeToggleBtn("👻 Noclip", getgenv().VoidNoclip)
+    noclipState.active = getgenv().VoidNoclip
+    noclipBtn.MouseButton1Click:Connect(function()
+        noclipState.active = not noclipState.active
+        getgenv().VoidNoclip = noclipState.active
+        if not noclipState.active then
+            local char = GetCharacter()
+            if char then
+                for _, part in char:GetDescendants() do
+                    if part:IsA("BasePart") then part.CanCollide = true end
+                end
+            end
+        end
+        noclipBtn.BackgroundColor3 = noclipState.active and Color3.fromRGB(0, 100, 220) or Color3.fromRGB(15, 25, 55)
+        noclipBtn.Text = "👻 Noclip" .. (noclipState.active and " ✓" or "")
+    end)
+
+    -- FLY TOGGLE
+    local flyBtn, flyState = MakeToggleBtn("✈ Fly", getgenv().VoidFlying)
+    flyState.active = getgenv().VoidFlying
+    flyBtn.MouseButton1Click:Connect(function()
+        flyState.active = not flyState.active
+        if flyState.active then StartFly() else StopFly() end
+        flyBtn.BackgroundColor3 = flyState.active and Color3.fromRGB(0, 100, 220) or Color3.fromRGB(15, 25, 55)
+        flyBtn.Text = "✈ Fly" .. (flyState.active and " ✓" or "")
+    end)
+
+    -- FLY UP / DOWN (hold buttons)
+    local flyUDFrame = Instance.new("Frame")
+    flyUDFrame.Size              = UDim2.new(1, 0, 0, 38)
+    flyUDFrame.BackgroundTransparency = 1
+    flyUDFrame.Parent            = panel
+
+    local flyUpBtn = Instance.new("TextButton")
+    flyUpBtn.Size             = UDim2.new(0.48, 0, 1, 0)
+    flyUpBtn.Position         = UDim2.new(0, 0, 0, 0)
+    flyUpBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 160)
+    flyUpBtn.BorderSizePixel  = 0
+    flyUpBtn.Text             = "▲ Up"
+    flyUpBtn.TextColor3       = Color3.fromRGB(220, 235, 255)
+    flyUpBtn.TextScaled       = true
+    flyUpBtn.Font             = Enum.Font.GothamBold
+    flyUpBtn.Parent           = flyUDFrame
+
+    local flyDownBtn = Instance.new("TextButton")
+    flyDownBtn.Size             = UDim2.new(0.48, 0, 1, 0)
+    flyDownBtn.Position         = UDim2.new(0.52, 0, 0, 0)
+    flyDownBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 160)
+    flyDownBtn.BorderSizePixel  = 0
+    flyDownBtn.Text             = "▼ Down"
+    flyDownBtn.TextColor3       = Color3.fromRGB(220, 235, 255)
+    flyDownBtn.TextScaled       = true
+    flyDownBtn.Font             = Enum.Font.GothamBold
+    flyDownBtn.Parent           = flyUDFrame
+
+    for _, b in ipairs({flyUpBtn, flyDownBtn}) do
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 8)
+        c.Parent       = b
+    end
+
+    flyUpBtn.MouseButton1Down:Connect(function()   getgenv().VoidMobileFlyUp = true  end)
+    flyUpBtn.MouseButton1Up:Connect(function()     getgenv().VoidMobileFlyUp = false end)
+    flyDownBtn.MouseButton1Down:Connect(function() getgenv().VoidMobileFlyDown = true  end)
+    flyDownBtn.MouseButton1Up:Connect(function()   getgenv().VoidMobileFlyDown = false end)
+
+    -- INF JUMP TOGGLE
+    local ijBtn, ijState = MakeToggleBtn("⬆ Inf Jump", getgenv().VoidInfJump)
+    ijState.active = getgenv().VoidInfJump
+    ijBtn.MouseButton1Click:Connect(function()
+        ijState.active = not ijState.active
+        getgenv().VoidInfJump = ijState.active
+        ijBtn.BackgroundColor3 = ijState.active and Color3.fromRGB(0, 100, 220) or Color3.fromRGB(15, 25, 55)
+        ijBtn.Text = "⬆ Inf Jump" .. (ijState.active and " ✓" or "")
+    end)
+
+    -- Minimize toggle
+    local minimized = false
+    local fullHeight = 320
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            minimized = not minimized
+            panel.Size = UDim2.new(0, 220, 0, minimized and 36 or fullHeight)
+            title.Text = minimized and "⚡ Void ▸" or "⚡ Void Mobile"
+        end
+    end)
+
+    -- Sync lock button when target clears externally
+    TrackConnection(RunService.Heartbeat:Connect(function()
+        if not getgenv().VoidAimState.PlayerTarget then
+            lockBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 0)
+            lockBtn.Text = "🔒 Lock Target"
+        end
+    end))
+
+    print("[Void] Mobile GUI created")
 end
+
+if IsMobile then
+    CreateMobileGUI()
+    -- Recreate on character respawn
+    TrackConnection(LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1)
+        CreateMobileGUI()
+    end))
+end
+
+-- ════════════════════════════════════════════════════════════════
+-- TABS
+-- ════════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────────────────────────────
 -- AIM TAB
@@ -373,85 +1209,206 @@ local AimTab = Window:CreateTab("Aim", "crosshair")
 AimTab:CreateSection("General")
 
 AimTab:CreateToggle({
-    Name = "Aimbot Enabled",
+    Name         = "Aimbot Enabled",
     CurrentValue = getgenv().Aimbot.Status,
     Callback = function(Value)
         getgenv().Aimbot.Status = Value
-        print(("[Void] [Toggle] Aimbot Enabled → %s"):format(tostring(Value)))
+        if not Value then
+            getgenv().VoidAimState.PlayerTarget = nil
+            getgenv().VoidAimState.HoldActive   = false
+        end
+        Rayfield:Notify({
+            Title   = "Aimbot",
+            Content = Value and "Enabled" or "Disabled",
+            Duration = 2,
+        })
     end
 })
 
 AimTab:CreateInput({
-    Name = "Aimbot Keybind",
-    PlaceholderText = "Enter key (e.g. C)",
+    Name                    = "Aimbot Keybind (PC)",
+    PlaceholderText         = "Enter key (e.g. C)",
     RemoveTextAfterFocusLost = true,
     Callback = function(Text)
         if Text and #Text > 0 then
-            getgenv().Aimbot.Keybind = Text:sub(1,1):upper()
-            print(("[Void] [Input] Aimbot Keybind → %s"):format(getgenv().Aimbot.Keybind))
+            getgenv().Aimbot.Keybind = Text:sub(1, 1):upper()
+            Rayfield:Notify({
+                Title   = "Aimbot Keybind",
+                Content = "Set to: " .. getgenv().Aimbot.Keybind,
+                Duration = 2,
+            })
         end
     end
 })
 
 AimTab:CreateDropdown({
-    Name = "Hit Part",
-    Options = {"HumanoidRootPart", "Head", "UpperTorso", "LowerTorso"},
-    CurrentOption = {getgenv().Aimbot.Hitpart},
+    Name           = "Hit Part",
+    Options        = {"HumanoidRootPart", "Head", "UpperTorso", "LowerTorso"},
+    CurrentOption  = {getgenv().Aimbot.Hitpart},
     MultipleOptions = false,
     Callback = function(Option)
         getgenv().Aimbot.Hitpart = Option[1] or Option
-        print(("[Void] [Dropdown] Hit Part → %s"):format(getgenv().Aimbot.Hitpart))
+        Rayfield:Notify({
+            Title   = "Hit Part",
+            Content = "Set to: " .. getgenv().Aimbot.Hitpart,
+            Duration = 2,
+        })
+    end
+})
+
+AimTab:CreateDropdown({
+    Name           = "Air Hit Part",
+    Options        = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"},
+    CurrentOption  = {getgenv().Aimbot.AirHitpart},
+    MultipleOptions = false,
+    Callback = function(Option)
+        getgenv().Aimbot.AirHitpart = Option[1] or Option
+        Rayfield:Notify({
+            Title   = "Air Hit Part",
+            Content = "Set to: " .. tostring(Option[1] or Option),
+            Duration = 2,
+        })
     end
 })
 
 AimTab:CreateSection("Lock Mode")
 
 AimTab:CreateDropdown({
-    Name = "Lock Mode",
-    Options = {"Toggle", "Hold"},
-    CurrentOption = {getgenv().Aimbot.LockMode},
+    Name           = "Lock Mode",
+    Options        = {"Toggle", "Hold"},
+    CurrentOption  = {getgenv().Aimbot.LockMode},
     MultipleOptions = false,
     Callback = function(Option)
-        getgenv().Aimbot.LockMode = Option[1] or Option
-        getgenv().VoidAimState.HoldActive = false
+        getgenv().Aimbot.LockMode           = Option[1] or Option
+        getgenv().VoidAimState.HoldActive   = false
         getgenv().VoidAimState.PlayerTarget = nil
-        print(("[Void] [Dropdown] Lock Mode → %s"):format(getgenv().Aimbot.LockMode))
+        Rayfield:Notify({
+            Title   = "Lock Mode",
+            Content = "Set to: " .. getgenv().Aimbot.LockMode,
+            Duration = 2,
+        })
+    end
+})
+
+AimTab:CreateToggle({
+    Name         = "Team Check",
+    CurrentValue = getgenv().Aimbot.TeamCheck,
+    Callback = function(Value)
+        getgenv().Aimbot.TeamCheck = Value
+        Rayfield:Notify({ Title = "Team Check", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+AimTab:CreateToggle({
+    Name         = "Visibility Check",
+    CurrentValue = getgenv().Aimbot.VisCheck,
+    Callback = function(Value)
+        getgenv().Aimbot.VisCheck = Value
+        Rayfield:Notify({ Title = "Visibility Check", Content = Value and "Enabled" or "Disabled", Duration = 2 })
     end
 })
 
 AimTab:CreateSection("Field of View")
 
 AimTab:CreateSlider({
-    Name = "Field of View",
-    Range = {70, 120},
-    Increment = 1,
-    Suffix = "°",
+    Name         = "Field of View (Camera)",
+    Range        = {70, 120},
+    Increment    = 1,
+    Suffix       = "°",
     CurrentValue = getgenv().VoidFOV,
-    Callback = SliderCallback("Field of View", function(Value)
+    Callback     = SliderCallback("Camera FOV", function(Value)
         getgenv().VoidFOV = Value
     end)
+})
+
+AimTab:CreateSection("FOV Circle")
+
+AimTab:CreateToggle({
+    Name         = "Show FOV Circle",
+    CurrentValue = getgenv().Aimbot.ShowFOV,
+    Callback = function(Value)
+        getgenv().Aimbot.ShowFOV = Value
+        Rayfield:Notify({ Title = "FOV Circle", Content = Value and "Visible" or "Hidden", Duration = 2 })
+    end
+})
+
+AimTab:CreateSlider({
+    Name         = "FOV Circle Size",
+    Range        = {10, 500},
+    Increment    = 5,
+    CurrentValue = getgenv().Aimbot.FOVSize,
+    Callback     = SliderCallback("FOV Circle Size", function(Value)
+        getgenv().Aimbot.FOVSize = Value
+    end)
+})
+
+AimTab:CreateSlider({
+    Name         = "FOV Circle Thickness",
+    Range        = {1, 10},
+    Increment    = 1,
+    CurrentValue = getgenv().Aimbot.FOVThickness,
+    Callback     = SliderCallback("FOV Thickness", function(Value)
+        getgenv().Aimbot.FOVThickness = Value
+    end)
+})
+
+AimTab:CreateSlider({
+    Name         = "FOV Circle Sides",
+    Range        = {3, 100},
+    Increment    = 1,
+    CurrentValue = getgenv().Aimbot.FOVSides,
+    Callback     = SliderCallback("FOV Sides", function(Value)
+        getgenv().Aimbot.FOVSides = Value
+    end)
+})
+
+AimTab:CreateToggle({
+    Name         = "FOV Filled",
+    CurrentValue = getgenv().Aimbot.FOVFilled,
+    Callback = function(Value)
+        getgenv().Aimbot.FOVFilled = Value
+        Rayfield:Notify({ Title = "FOV Filled", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+AimTab:CreateToggle({
+    Name         = "Rainbow FOV",
+    CurrentValue = getgenv().Aimbot.RainbowFOV,
+    Callback = function(Value)
+        getgenv().Aimbot.RainbowFOV = Value
+        Rayfield:Notify({ Title = "Rainbow FOV", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+AimTab:CreateToggle({
+    Name         = "Pulse FOV",
+    CurrentValue = getgenv().Aimbot.PulseFOV,
+    Callback = function(Value)
+        getgenv().Aimbot.PulseFOV = Value
+        Rayfield:Notify({ Title = "Pulse FOV", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
 })
 
 AimTab:CreateSection("Prediction")
 
 AimTab:CreateSlider({
-    Name = "Prediction Horizontal (X/Z)",
-    Range = {0, 100},
-    Increment = 1,
-    Suffix = "%",
+    Name         = "Prediction Horizontal (X/Z)",
+    Range        = {0, 100},
+    Increment    = 1,
+    Suffix       = "%",
     CurrentValue = getgenv().Aimbot.Prediction.Horizontal * 200,
-    Callback = SliderCallback("Prediction Horizontal", function(Value)
+    Callback     = SliderCallback("Prediction Horizontal", function(Value)
         getgenv().Aimbot.Prediction.Horizontal = Value / 100 * 0.5
     end)
 })
 
 AimTab:CreateSlider({
-    Name = "Prediction Vertical (Y)",
-    Range = {0, 100},
-    Increment = 1,
-    Suffix = "%",
+    Name         = "Prediction Vertical (Y)",
+    Range        = {0, 100},
+    Increment    = 1,
+    Suffix       = "%",
     CurrentValue = getgenv().Aimbot.Prediction.Vertical * 200,
-    Callback = SliderCallback("Prediction Vertical", function(Value)
+    Callback     = SliderCallback("Prediction Vertical", function(Value)
         getgenv().Aimbot.Prediction.Vertical = Value / 100 * 0.5
     end)
 })
@@ -459,12 +1416,587 @@ AimTab:CreateSlider({
 AimTab:CreateSection("Smoothness")
 
 AimTab:CreateSlider({
-    Name = "Smoothness",
-    Range = {1, 50},
-    Increment = 1,
+    Name         = "Smoothness",
+    Range        = {1, 50},
+    Increment    = 1,
     CurrentValue = getgenv().Aimbot.Smoothness * 10,
-    Callback = SliderCallback("Smoothness", function(Value)
-        getgenv().Aimbot.Smoothness = Value / 10
+    Callback     = SliderCallback("Smoothness", function(Value)
+        getgenv().Aimbot.Smoothness = math.max(Value / 10, 0.1)
+    end)
+})
+
+AimTab:CreateSlider({
+    Name         = "Shake Intensity",
+    Range        = {0, 10},
+    Increment    = 1,
+    CurrentValue = getgenv().Aimbot.ShakeIntensity or 0,
+    Callback     = SliderCallback("Shake Intensity", function(Value)
+        getgenv().Aimbot.ShakeIntensity = Value
+    end)
+})
+
+AimTab:CreateSlider({
+    Name         = "Max Lock Distance",
+    Range        = {50, 500},
+    Increment    = 10,
+    CurrentValue = getgenv().Aimbot.MaxDistance,
+    Callback     = SliderCallback("Max Lock Distance", function(Value)
+        getgenv().Aimbot.MaxDistance = Value
+    end)
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- MOVEMENT TAB
+-- ────────────────────────────────────────────────────────────────
+
+local MovementTab = Window:CreateTab("Movement", "zap")
+
+MovementTab:CreateSection("Speed")
+
+local WalkSpeedSlider = MovementTab:CreateSlider({
+    Name         = "Walk Speed",
+    Range        = {16, 500},
+    Increment    = 1,
+    CurrentValue = getgenv().VoidSpeedValue,
+    Callback     = SliderCallback("Walk Speed", function(Value)
+        getgenv().VoidSpeedValue = Value
+        local hum = GetHumanoid()
+        if hum then hum.WalkSpeed = Value end
+    end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Walk Speed",
+    Callback = function()
+        getgenv().VoidSpeedValue = 16
+        local hum = GetHumanoid()
+        if hum then hum.WalkSpeed = 16 end
+        WalkSpeedSlider:Set(16)  -- update UI slider
+        Rayfield:Notify({ Title = "Speed Reset", Content = "WalkSpeed set to 16.", Duration = 3 })
+    end
+})
+
+MovementTab:CreateSection("Jump")
+
+local JumpPowerSlider = MovementTab:CreateSlider({
+    Name         = "Jump Power",
+    Range        = {50, 500},
+    Increment    = 1,
+    CurrentValue = getgenv().VoidJumpValue,
+    Callback     = SliderCallback("Jump Power", function(Value)
+        getgenv().VoidJumpValue = Value
+        local hum = GetHumanoid()
+        if hum then hum.JumpPower = Value end
+    end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Jump Power",
+    Callback = function()
+        getgenv().VoidJumpValue = 50
+        local hum = GetHumanoid()
+        if hum then hum.JumpPower = 50 end
+        JumpPowerSlider:Set(50)  -- update UI slider
+        Rayfield:Notify({ Title = "Jump Reset", Content = "JumpPower set to 50.", Duration = 3 })
+    end
+})
+
+MovementTab:CreateSection("Noclip")
+
+MovementTab:CreateToggle({
+    Name         = "Noclip",
+    CurrentValue = getgenv().VoidNoclip,
+    Callback = function(Value)
+        getgenv().VoidNoclip = Value
+        if not Value then
+            local char = GetCharacter()
+            if char then
+                for _, part in char:GetDescendants() do
+                    if part:IsA("BasePart") then part.CanCollide = true end
+                end
+            end
+        end
+        Rayfield:Notify({ Title = "Noclip", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+MovementTab:CreateSection("Infinite Jump")
+
+MovementTab:CreateToggle({
+    Name         = "Infinite Jump",
+    CurrentValue = getgenv().VoidInfJump,
+    Callback = function(Value)
+        getgenv().VoidInfJump = Value
+        Rayfield:Notify({ Title = "Infinite Jump", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+MovementTab:CreateSection("Fly")
+
+local FlySpeedSlider = MovementTab:CreateSlider({
+    Name         = "Fly Speed",
+    Range        = {10, 500},
+    Increment    = 5,
+    CurrentValue = getgenv().VoidFlySpeed,
+    Callback     = SliderCallback("Fly Speed", function(Value)
+        getgenv().VoidFlySpeed = Value
+    end)
+})
+
+local FlyToggle = MovementTab:CreateToggle({
+    Name         = "Enable Fly",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            StartFly()
+            Rayfield:Notify({ Title = "Fly", Content = IsMobile and "Enabled (use mobile buttons)" or "Enabled (WASD + Space/Shift)", Duration = 3 })
+        else
+            StopFly()
+            Rayfield:Notify({ Title = "Fly", Content = "Disabled.", Duration = 2 })
+        end
+    end
+})
+
+if not IsMobile then
+    MovementTab:CreateKeybind({
+        Name            = "Fly Keybind (PC)",
+        CurrentKeybind  = "F",
+        HoldToInteract  = false,
+        Callback = function()
+            if getgenv().VoidFlying then
+                StopFly()
+                FlyToggle:Set(false)
+            else
+                StartFly()
+                FlyToggle:Set(true)
+            end
+        end
+    })
+end
+
+MovementTab:CreateSection("Teleport")
+
+local tpToMouseEnabled = false
+MovementTab:CreateToggle({
+    Name         = IsMobile and "Teleport on Tap" or "Teleport to Mouse (CTRL+Click)",
+    CurrentValue = false,
+    Callback = function(Value)
+        tpToMouseEnabled = Value
+        Rayfield:Notify({
+            Title   = "TP to Mouse",
+            Content = Value and (IsMobile and "Tap anywhere to teleport" or "Enabled (CTRL+Click)") or "Disabled",
+            Duration = 2
+        })
+    end
+})
+
+if IsMobile then
+    -- Mobile: single tap teleport
+    UserInputService.TouchTap:Connect(function(touchPositions)
+        if not tpToMouseEnabled then return end
+        local root = GetRootPart()
+        if not root then return end
+        local touchPos = touchPositions[1]
+        local unitRay  = camera:ViewportPointToRay(touchPos.X, touchPos.Y)
+        local params   = RaycastParams.new()
+        params.FilterDescendantsInstances = { GetCharacter() }
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        local result = WS:Raycast(unitRay.Origin, unitRay.Direction * 500, params)
+        if result then
+            root.CFrame = CFrame.new(result.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+else
+    Mouse.Button1Down:Connect(function()
+        if tpToMouseEnabled and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            local root = GetRootPart()
+            if root then
+                root.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0))
+            end
+        end
+    end)
+end
+
+MovementTab:CreateSection("Character States")
+
+MovementTab:CreateButton({
+    Name = "Sit",
+    Callback = function()
+        local hum = GetHumanoid()
+        if hum then hum.Sit = true end
+        Rayfield:Notify({ Title = "Character", Content = "Sitting.", Duration = 2 })
+    end
+})
+
+MovementTab:CreateButton({
+    Name = "Stand",
+    Callback = function()
+        local hum = GetHumanoid()
+        if hum then hum.Sit = false end
+        Rayfield:Notify({ Title = "Character", Content = "Standing.", Duration = 2 })
+    end
+})
+
+MovementTab:CreateToggle({
+    Name         = "Freeze Character",
+    CurrentValue = false,
+    Callback = function(Value)
+        local hum  = GetHumanoid()
+        local root = GetRootPart()
+        if hum  then hum.PlatformStand = Value end
+        if root then root.Anchored      = Value end
+        Rayfield:Notify({
+            Title   = Value and "Frozen" or "Unfrozen",
+            Content = Value and "Character locked in place." or "Character unlocked.",
+            Duration = 2
+        })
+    end
+})
+
+MovementTab:CreateSection("Hip Height")
+
+MovementTab:CreateSlider({
+    Name         = "Hip Height",
+    Range        = {0, 50},
+    Increment    = 0.5,
+    CurrentValue = 0,
+    Callback     = SliderCallback("Hip Height", function(Value)
+        local hum = GetHumanoid()
+        if hum then hum.HipHeight = Value end
+    end)
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- TARGET TAB
+-- ────────────────────────────────────────────────────────────────
+
+local TargetTab = Window:CreateTab("Target", "user")
+
+TargetTab:CreateSection("Select Target")
+
+local SelectedPlayerName = nil
+
+local PlayerDropdown = TargetTab:CreateDropdown({
+    Name            = "Select Target Player",
+    Options         = GetPlayerList(),
+    CurrentOption   = {},
+    MultipleOptions = false,
+    Callback = function(Option)
+        SelectedPlayerName = Option[1] or Option
+        Rayfield:Notify({
+            Title   = "Target Selected",
+            Content = "Target: " .. tostring(SelectedPlayerName),
+            Duration = 3
+        })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Refresh Player List",
+    Callback = function()
+        PlayerDropdown:Refresh(GetPlayerList())
+        Rayfield:Notify({ Title = "Refreshed", Content = "Player list updated.", Duration = 2 })
+    end
+})
+
+TargetTab:CreateSection("Aimbot Target Info")
+
+TargetTab:CreateButton({
+    Name = "Print Closest Player to Cursor",
+    Callback = function()
+        local closestDist = math.huge
+        local closestName = "None"
+        for _, player in Players:GetPlayers() do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
+                    if onScreen then
+                        local refPos = IsMobile
+                            and Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+                            or Vector2.new(Mouse.X, Mouse.Y)
+                        local dist = (refPos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            closestName = player.Name
+                        end
+                    end
+                end
+            end
+        end
+        Rayfield:Notify({
+            Title   = "Closest Player",
+            Content = closestName .. " (" .. math.floor(closestDist) .. "px from center)",
+            Duration = 4
+        })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Teleport to Aim Target",
+    Callback = function()
+        local state  = getgenv().VoidAimState
+        local myRoot = GetRootPart()
+        if state.PlayerTarget and state.PlayerTarget.Character and myRoot then
+            local root = state.PlayerTarget.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                myRoot.CFrame = root.CFrame * CFrame.new(0, 0, 3)
+                Rayfield:Notify({ Title = "Teleported", Content = "Teleported to " .. state.PlayerTarget.Name, Duration = 3 })
+                return
+            end
+        end
+        Rayfield:Notify({ Title = "No Aim Target", Content = "Lock onto a player with aimbot first.", Duration = 3 })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Copy Aim Target Name",
+    Callback = function()
+        local state = getgenv().VoidAimState
+        if state.PlayerTarget then
+            pcall(function() setclipboard(state.PlayerTarget.Name) end)
+            Rayfield:Notify({ Title = "Copied", Content = state.PlayerTarget.Name .. " copied to clipboard.", Duration = 3 })
+        else
+            Rayfield:Notify({ Title = "No Aim Target", Content = "Lock onto a player first.", Duration = 3 })
+        end
+    end
+})
+
+TargetTab:CreateSection("Dropdown Target Actions")
+
+TargetTab:CreateButton({
+    Name = "Teleport to Selected Player",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "No Target", Content = "Select a player from the dropdown first.", Duration = 3 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        local myRoot = GetRootPart()
+        if target and target.Character and myRoot then
+            local root = target.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                myRoot.CFrame = root.CFrame + Vector3.new(3, 0, 0)
+                Rayfield:Notify({ Title = "Teleported", Content = "Teleported to " .. SelectedPlayerName, Duration = 3 })
+                return
+            end
+        end
+        Rayfield:Notify({ Title = "Failed", Content = "Could not find target character.", Duration = 3 })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "View Selected Player",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "No Target", Content = "Select a player from the dropdown first.", Duration = 3 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        if target and target.Character then
+            local hum = target.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                WS.CurrentCamera.CameraSubject = hum
+                Rayfield:Notify({ Title = "Viewing", Content = "Now viewing " .. SelectedPlayerName, Duration = 3 })
+                return
+            end
+        end
+        Rayfield:Notify({ Title = "Failed", Content = "Could not view target.", Duration = 3 })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Reset Camera to Self",
+    Callback = function()
+        local char = GetCharacter()
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            WS.CurrentCamera.CameraSubject = hum
+            Rayfield:Notify({ Title = "Camera Reset", Content = "Camera returned to your character.", Duration = 2 })
+        end
+    end
+})
+
+local loopTeleportEnabled = false
+local loopTeleportConn    = nil
+
+TargetTab:CreateToggle({
+    Name         = "Loop Teleport to Target",
+    CurrentValue = false,
+    Callback = function(Value)
+        loopTeleportEnabled = Value
+        if Value then
+            loopTeleportConn = TrackConnection(RunService.Heartbeat:Connect(function()
+                if not loopTeleportEnabled or not SelectedPlayerName then return end
+                local target = GetPlayerByName(SelectedPlayerName)
+                local myRoot = GetRootPart()
+                if target and target.Character and myRoot then
+                    local root = target.Character:FindFirstChild("HumanoidRootPart")
+                    if root then myRoot.CFrame = root.CFrame + Vector3.new(3, 0, 0) end
+                end
+            end))
+            Rayfield:Notify({ Title = "Loop TP", Content = "Loop teleporting to " .. tostring(SelectedPlayerName or "none"), Duration = 3 })
+        else
+            if loopTeleportConn then
+                loopTeleportConn:Disconnect()
+                loopTeleportConn = nil
+            end
+            Rayfield:Notify({ Title = "Loop TP", Content = "Stopped.", Duration = 2 })
+        end
+    end
+})
+
+-- ────────────────────────────────────────────────────────────────
+-- VISUALS TAB
+-- ────────────────────────────────────────────────────────────────
+
+local VisualsTab = Window:CreateTab("Visuals", "eye")
+
+VisualsTab:CreateSection("Drawing ESP Master")
+
+VisualsTab:CreateToggle({
+    Name         = "Enable ESP",
+    CurrentValue = getgenv().VoidESPEnabled,
+    Callback = function(Value)
+        getgenv().VoidESPEnabled = Value
+        if not Value then
+            for _, d in pairs(DrawingESP) do
+                for _, v in pairs(d) do v.Visible = false end
+            end
+            for _, l in ipairs(TracerLines) do pcall(l.Remove, l) end
+            TracerLines = {}
+            for _, lines in pairs(SkeletonLines) do
+                for _, l in ipairs(lines) do l.Visible = false end
+            end
+            for player, _ in pairs(Highlights) do RemoveHighlight(player) end
+        end
+        Rayfield:Notify({ Title = "ESP", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateSection("ESP Features")
+
+VisualsTab:CreateToggle({
+    Name         = "Box ESP",
+    CurrentValue = getgenv().VoidESPBoxEnabled,
+    Callback = function(v)
+        getgenv().VoidESPBoxEnabled = v
+        Rayfield:Notify({ Title = "Box ESP", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Name ESP",
+    CurrentValue = getgenv().VoidESPNameEnabled,
+    Callback = function(v)
+        getgenv().VoidESPNameEnabled = v
+        Rayfield:Notify({ Title = "Name ESP", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Health Bar",
+    CurrentValue = getgenv().VoidESPHealthEnabled,
+    Callback = function(v)
+        getgenv().VoidESPHealthEnabled = v
+        Rayfield:Notify({ Title = "Health Bar", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Distance",
+    CurrentValue = getgenv().VoidESPDistEnabled,
+    Callback = function(v)
+        getgenv().VoidESPDistEnabled = v
+        Rayfield:Notify({ Title = "Distance ESP", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Tracers",
+    CurrentValue = getgenv().VoidESPTracers,
+    Callback = function(v)
+        getgenv().VoidESPTracers = v
+        Rayfield:Notify({ Title = "Tracers", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Skeleton",
+    CurrentValue = getgenv().VoidESPSkeleton,
+    Callback = function(v)
+        getgenv().VoidESPSkeleton = v
+        Rayfield:Notify({ Title = "Skeleton ESP", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Head Dot",
+    CurrentValue = getgenv().VoidESPHeadDot,
+    Callback = function(v)
+        getgenv().VoidESPHeadDot = v
+        Rayfield:Notify({ Title = "Head Dot", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Look Direction",
+    CurrentValue = getgenv().VoidESPLookDir,
+    Callback = function(v)
+        getgenv().VoidESPLookDir = v
+        Rayfield:Notify({ Title = "Look Direction", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateToggle({
+    Name         = "Team Check (skip teammates)",
+    CurrentValue = getgenv().VoidESPTeamCheck,
+    Callback = function(v)
+        getgenv().VoidESPTeamCheck = v
+        Rayfield:Notify({ Title = "ESP Team Check", Content = v and "On" or "Off", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateSlider({
+    Name         = "Max ESP Distance",
+    Range        = {100, 2000},
+    Increment    = 50,
+    CurrentValue = getgenv().VoidESPMaxDist,
+    Callback     = SliderCallback("Max ESP Distance", function(Value)
+        getgenv().VoidESPMaxDist = Value
+    end)
+})
+
+VisualsTab:CreateSection("Chams")
+
+VisualsTab:CreateToggle({
+    Name         = "Chams (Highlight)",
+    CurrentValue = getgenv().VoidChamsEnabled,
+    Callback = function(v)
+        getgenv().VoidChamsEnabled = v
+        Rayfield:Notify({ Title = "Chams", Content = v and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+VisualsTab:CreateSection("Character")
+
+VisualsTab:CreateButton({
+    Name = "Reset Character",
+    Callback = function()
+        LocalPlayer:LoadCharacter()
+        Rayfield:Notify({ Title = "Character Reset", Content = "Your character has been reset.", Duration = 3 })
+    end
+})
+
+VisualsTab:CreateSection("Camera")
+
+VisualsTab:CreateSlider({
+    Name         = "Camera Zoom Max",
+    Range        = {10, 500},
+    Increment    = 10,
+    CurrentValue = 400,
+    Callback     = SliderCallback("Camera Zoom Max", function(Value)
+        LocalPlayer.CameraMaxZoomDistance = Value
     end)
 })
 
@@ -478,28 +2010,25 @@ GraphicsTab:CreateSection("Lighting Presets")
 
 GraphicsTab:CreateButton({
     Name = "Apply Custom Lighting",
-    Icon = "sun",
     Callback = function()
-        Lighting.FogEnd = 17000
-        Lighting.FogStart = 0
-        Lighting.FogColor = Color3.fromRGB(132, 196, 245)
-        Lighting.GlobalShadows = true
-        Lighting.Ambient = Color3.fromRGB(130, 170, 200)
-        Lighting.Brightness = 2
-        Lighting.ColorShift_Bottom = Color3.fromRGB(160, 211, 250)
-        Lighting.ColorShift_Top = Color3.fromRGB(255, 247, 237)
-        Lighting.EnvironmentDiffuseScale = 0.105
+        Lighting.FogEnd                   = 17000
+        Lighting.FogStart                 = 0
+        Lighting.FogColor                 = Color3.fromRGB(132, 196, 245)
+        Lighting.GlobalShadows            = true
+        Lighting.Ambient                  = Color3.fromRGB(130, 170, 200)
+        Lighting.Brightness               = 2
+        Lighting.ColorShift_Bottom        = Color3.fromRGB(160, 211, 250)
+        Lighting.ColorShift_Top           = Color3.fromRGB(255, 247, 237)
+        Lighting.EnvironmentDiffuseScale  = 0.105
         Lighting.EnvironmentSpecularScale = 0.522
-        Lighting.OutdoorAmbient = Color3.fromRGB(51, 54, 67)
-        Lighting.ShadowSoftness = 0.1
-        print("[Void] [Button] Apply Custom Lighting")
-        Rayfield:Notify({ Title = "Lighting Applied", Content = "Custom lighting set.", Duration = 3, Image = "sun" })
+        Lighting.OutdoorAmbient           = Color3.fromRGB(51, 54, 67)
+        Lighting.ShadowSoftness           = 0.1
+        Rayfield:Notify({ Title = "Lighting Applied", Content = "Custom lighting preset applied.", Duration = 3 })
     end
 })
 
 GraphicsTab:CreateButton({
     Name = "Reset to Game Default",
-    Icon = "rotate-ccw",
     Callback = function()
         Lighting.FogEnd                   = DefaultLighting.FogEnd
         Lighting.FogStart                 = DefaultLighting.FogStart
@@ -516,15 +2045,14 @@ GraphicsTab:CreateButton({
         Lighting.ClockTime                = DefaultLighting.ClockTime
         Lighting.GeographicLatitude       = DefaultLighting.GeographicLatitude
         Lighting.ExposureCompensation     = DefaultLighting.ExposureCompensation
-        print("[Void] [Button] Reset to Game Default Lighting")
-        Rayfield:Notify({ Title = "Lighting Reset", Content = "Restored to game default.", Duration = 3, Image = "rotate-ccw" })
+        Rayfield:Notify({ Title = "Lighting Reset", Content = "Restored to original game lighting.", Duration = 3 })
     end
 })
 
 GraphicsTab:CreateSection("Fullbright")
 
 GraphicsTab:CreateToggle({
-    Name = "Fullbright",
+    Name         = "Fullbright",
     CurrentValue = getgenv().VoidFullbright,
     Callback = function(Value)
         getgenv().VoidFullbright = Value
@@ -534,244 +2062,265 @@ GraphicsTab:CreateToggle({
             Lighting.Brightness     = DefaultLighting.Brightness
             Lighting.GlobalShadows  = DefaultLighting.GlobalShadows
         end
-        print(("[Void] [Toggle] Fullbright → %s"):format(tostring(Value)))
+        Rayfield:Notify({ Title = "Fullbright", Content = Value and "Enabled" or "Disabled", Duration = 2 })
     end
 })
 
 GraphicsTab:CreateSection("Time of Day")
 
-GraphicsTab:CreateSlider({
-    Name = "Clock Time",
-    Range = {0, 24},
-    Increment = 1,
-    Suffix = ":00",
+local ClockSlider = GraphicsTab:CreateSlider({
+    Name         = "Clock Time",
+    Range        = {0, 24},
+    Increment    = 1,
+    Suffix       = ":00",
     CurrentValue = math.floor(Lighting.ClockTime),
-    Callback = SliderCallback("Clock Time", function(Value)
+    Callback     = SliderCallback("Clock Time", function(Value)
         Lighting.ClockTime = Value
     end)
 })
 
--- ────────────────────────────────────────────────────────────────
--- MOVEMENT TAB
--- ────────────────────────────────────────────────────────────────
-
-local MovementTab = Window:CreateTab("Movement", "zap")
-
-MovementTab:CreateSection("Speed")
-
-MovementTab:CreateSlider({
-    Name = "Walk Speed",
-    Range = {16, 150},
-    Increment = 1,
-    CurrentValue = getgenv().VoidSpeedValue,
-    Callback = SliderCallback("Walk Speed", function(Value)
-        getgenv().VoidSpeedValue = Value
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = Value
-        end
-    end)
-})
-
-MovementTab:CreateButton({
-    Name = "Reset Walk Speed",
+GraphicsTab:CreateButton({
+    Name = "Set to Daytime (12:00)",
     Callback = function()
-        getgenv().VoidSpeedValue = 16
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = 16
-        end
-        print("[Void] [Button] Reset Walk Speed")
-        Rayfield:Notify({ Title = "Speed Reset", Content = "WalkSpeed restored to 16.", Duration = 3, Image = "zap" })
+        Lighting.ClockTime = 12
+        ClockSlider:Set(12)
+        Rayfield:Notify({ Title = "Time Set", Content = "Clock set to 12:00 (noon).", Duration = 2 })
     end
 })
 
-MovementTab:CreateSection("Jump")
-
-MovementTab:CreateSlider({
-    Name = "Jump Power",
-    Range = {50, 300},
-    Increment = 1,
-    CurrentValue = getgenv().VoidJumpValue,
-    Callback = SliderCallback("Jump Power", function(Value)
-        getgenv().VoidJumpValue = Value
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.JumpPower = Value
-        end
-    end)
-})
-
-MovementTab:CreateButton({
-    Name = "Reset Jump Power",
+GraphicsTab:CreateButton({
+    Name = "Set to Nighttime (0:00)",
     Callback = function()
-        getgenv().VoidJumpValue = 50
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.JumpPower = 50
-        end
-        print("[Void] [Button] Reset Jump Power")
-        Rayfield:Notify({ Title = "Jump Reset", Content = "JumpPower restored to 50.", Duration = 3, Image = "zap" })
+        Lighting.ClockTime = 0
+        ClockSlider:Set(0)
+        Rayfield:Notify({ Title = "Time Set", Content = "Clock set to 0:00 (midnight).", Duration = 2 })
     end
 })
 
-MovementTab:CreateSection("Noclip")
+GraphicsTab:CreateSection("Post Processing")
 
-MovementTab:CreateToggle({
-    Name = "Noclip",
-    CurrentValue = getgenv().VoidNoclip,
+GraphicsTab:CreateToggle({
+    Name         = "RTX Mode",
+    CurrentValue = false,
     Callback = function(Value)
-        getgenv().VoidNoclip = Value
-        if not Value and LocalPlayer.Character then
-            for _, part in LocalPlayer.Character:GetDescendants() do
-                if part:IsA("BasePart") then
-                    part.CanCollide = true
-                end
-            end
-        end
-        print(("[Void] [Toggle] Noclip → %s"):format(tostring(Value)))
-    end
-})
-
-MovementTab:CreateSection("Infinite Jump")
-
-MovementTab:CreateToggle({
-    Name = "Infinite Jump",
-    CurrentValue = getgenv().VoidInfJump,
-    Callback = function(Value)
-        getgenv().VoidInfJump = Value
-        print(("[Void] [Toggle] Infinite Jump → %s"):format(tostring(Value)))
-    end
-})
-
--- ────────────────────────────────────────────────────────────────
--- TARGET TAB
--- ────────────────────────────────────────────────────────────────
-
-local TargetTab = Window:CreateTab("Target", "user")
-
-TargetTab:CreateSection("Target Info")
-
-TargetTab:CreateButton({
-    Name = "Print Closest Player",
-    Callback = function()
-        local closestDist = math.huge
-        local closestName = "None"
-
-        for _, player in Players:GetPlayers() do
-            if player ~= LocalPlayer and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-                        if dist < closestDist then
-                            closestDist = dist
-                            closestName = player.Name
-                        end
-                    end
-                end
-            end
-        end
-
-        print(("[Void] [Button] Closest Player → %s (%dpx)"):format(closestName, math.floor(closestDist)))
-        Rayfield:Notify({
-            Title = "Closest Player",
-            Content = closestName .. " (" .. math.floor(closestDist) .. "px from cursor)",
-            Duration = 4,
-            Image = "user"
-        })
-    end
-})
-
-TargetTab:CreateSection("Target Actions")
-
-TargetTab:CreateButton({
-    Name = "Teleport to Target",
-    Callback = function()
-        local state = getgenv().VoidAimState
-        if state.PlayerTarget and state.PlayerTarget.Character then
-            local root = state.PlayerTarget.Character:FindFirstChild("HumanoidRootPart")
-            local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if root and myRoot then
-                myRoot.CFrame = root.CFrame * CFrame.new(0, 0, 3)
-                print(("[Void] [Button] Teleported to %s"):format(state.PlayerTarget.Name))
-                Rayfield:Notify({ Title = "Teleported", Content = "Teleported to " .. state.PlayerTarget.Name, Duration = 3, Image = "user" })
-            end
-        else
-            Rayfield:Notify({ Title = "No Target", Content = "Lock onto a player first.", Duration = 3, Image = "alert-triangle" })
-        end
-    end
-})
-
-TargetTab:CreateButton({
-    Name = "Copy Target Name",
-    Callback = function()
-        local state = getgenv().VoidAimState
-        if state.PlayerTarget then
-            setclipboard(state.PlayerTarget.Name)
-            print(("[Void] [Button] Copied name: %s"):format(state.PlayerTarget.Name))
-            Rayfield:Notify({ Title = "Copied", Content = state.PlayerTarget.Name .. " copied to clipboard.", Duration = 3, Image = "clipboard" })
-        else
-            Rayfield:Notify({ Title = "No Target", Content = "Lock onto a player first.", Duration = 3, Image = "alert-triangle" })
-        end
-    end
-})
-
--- ────────────────────────────────────────────────────────────────
--- VISUALS TAB
--- ────────────────────────────────────────────────────────────────
-
-local VisualsTab = Window:CreateTab("Visuals", "eye")
-
-VisualsTab:CreateSection("ESP")
-
-VisualsTab:CreateToggle({
-    Name = "Player ESP",
-    CurrentValue = getgenv().VoidESP,
-    Callback = function(Value)
-        getgenv().VoidESP = Value
         if Value then
-            for _, player in Players:GetPlayers() do
-                CreateESP(player)
-            end
+            Lighting.Brightness               = 2.5
+            Lighting.Ambient                  = Color3.fromRGB(100, 100, 100)
+            Lighting.OutdoorAmbient           = Color3.fromRGB(128, 128, 128)
+            Lighting.ColorShift_Top           = Color3.fromRGB(255, 247, 237)
+            Lighting.ColorShift_Bottom        = Color3.fromRGB(200, 200, 220)
+            Lighting.FogEnd                   = 100000
+            Lighting.ExposureCompensation     = 0.2
+
+            local bloom = Lighting:FindFirstChildOfClass("BloomEffect") or Instance.new("BloomEffect", Lighting)
+            bloom.Enabled, bloom.Intensity, bloom.Size, bloom.Threshold = true, 0.4, 24, 0.8
+
+            local sun = Lighting:FindFirstChildOfClass("SunRaysEffect") or Instance.new("SunRaysEffect", Lighting)
+            sun.Enabled, sun.Intensity, sun.Spread = true, 0.15, 0.8
+
+            local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect") or Instance.new("ColorCorrectionEffect", Lighting)
+            cc.Enabled, cc.Brightness, cc.Contrast, cc.Saturation = true, 0.05, 0.15, 0.1
+
+            local atmos = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere", Lighting)
+            atmos.Density, atmos.Offset = 0.3, 0.25
+            atmos.Color  = Color3.fromRGB(199, 199, 199)
+            atmos.Decay  = Color3.fromRGB(106, 112, 125)
+            atmos.Glare, atmos.Haze = 0.2, 0.3
+
+            Rayfield:Notify({ Title = "RTX Mode", Content = "Enabled — enhanced visuals active.", Duration = 3 })
         else
-            for _, obj in ESPFolder:GetChildren() do
-                obj:Destroy()
+            for _, e in pairs(Lighting:GetChildren()) do
+                if e:IsA("BloomEffect") or e:IsA("SunRaysEffect") or e:IsA("ColorCorrectionEffect") or e:IsA("Atmosphere") then
+                    e:Destroy()
+                end
+            end
+            Lighting.Brightness           = DefaultLighting.Brightness
+            Lighting.Ambient              = DefaultLighting.Ambient
+            Lighting.OutdoorAmbient       = DefaultLighting.OutdoorAmbient
+            Lighting.ColorShift_Top       = DefaultLighting.ColorShift_Top
+            Lighting.ColorShift_Bottom    = DefaultLighting.ColorShift_Bottom
+            Lighting.FogEnd               = DefaultLighting.FogEnd
+            Lighting.ExposureCompensation = DefaultLighting.ExposureCompensation
+            Rayfield:Notify({ Title = "RTX Mode", Content = "Disabled.", Duration = 3 })
+        end
+    end
+})
+
+GraphicsTab:CreateToggle({
+    Name         = "Bloom",
+    CurrentValue = false,
+    Callback = function(Value)
+        local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+        if Value then
+            if not bloom then bloom = Instance.new("BloomEffect", Lighting) end
+            bloom.Enabled, bloom.Intensity, bloom.Size, bloom.Threshold = true, 0.4, 24, 0.8
+        else
+            if bloom then bloom:Destroy() end
+        end
+        Rayfield:Notify({ Title = "Bloom", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+GraphicsTab:CreateToggle({
+    Name         = "Sun Rays",
+    CurrentValue = false,
+    Callback = function(Value)
+        local sun = Lighting:FindFirstChildOfClass("SunRaysEffect")
+        if Value then
+            if not sun then sun = Instance.new("SunRaysEffect", Lighting) end
+            sun.Enabled, sun.Intensity, sun.Spread = true, 0.15, 0.8
+        else
+            if sun then sun:Destroy() end
+        end
+        Rayfield:Notify({ Title = "Sun Rays", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+GraphicsTab:CreateToggle({
+    Name         = "Color Correction",
+    CurrentValue = false,
+    Callback = function(Value)
+        local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+        if Value then
+            if not cc then cc = Instance.new("ColorCorrectionEffect", Lighting) end
+            cc.Enabled, cc.Brightness, cc.Contrast, cc.Saturation = true, 0.05, 0.15, 0.1
+        else
+            if cc then cc:Destroy() end
+        end
+        Rayfield:Notify({ Title = "Color Correction", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+GraphicsTab:CreateSection("Performance")
+
+GraphicsTab:CreateToggle({
+    Name         = "Performance Mode",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd        = 500
+            for _, o in pairs(WS:GetDescendants()) do
+                if o:IsA("BasePart") then
+                    o.CastShadow = false
+                    if o:IsA("MeshPart") then
+                        o.RenderFidelity = Enum.RenderFidelity.Performance
+                    end
+                elseif o:IsA("ParticleEmitter") or o:IsA("Trail") or o:IsA("Smoke") or o:IsA("Fire") or o:IsA("Sparkles") then
+                    o.Enabled = false
+                end
+            end
+            Rayfield:Notify({ Title = "Performance Mode", Content = "Enabled — FPS boosted.", Duration = 3 })
+        else
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+            Lighting.GlobalShadows = DefaultLighting.GlobalShadows
+            Lighting.FogEnd        = DefaultLighting.FogEnd
+            Rayfield:Notify({ Title = "Performance Mode", Content = "Disabled.", Duration = 3 })
+        end
+    end
+})
+
+GraphicsTab:CreateToggle({
+    Name         = "Remove Shadows",
+    CurrentValue = false,
+    Callback = function(Value)
+        Lighting.GlobalShadows = not Value
+        for _, o in pairs(WS:GetDescendants()) do
+            if o:IsA("BasePart") then o.CastShadow = not Value end
+        end
+        Rayfield:Notify({ Title = "Shadows", Content = Value and "Removed" or "Restored", Duration = 2 })
+    end
+})
+
+GraphicsTab:CreateToggle({
+    Name         = "Disable Particles",
+    CurrentValue = false,
+    Callback = function(Value)
+        for _, o in pairs(WS:GetDescendants()) do
+            if o:IsA("ParticleEmitter") or o:IsA("Trail") or o:IsA("Smoke") or o:IsA("Fire") or o:IsA("Sparkles") then
+                o.Enabled = not Value
             end
         end
-        print(("[Void] [Toggle] Player ESP → %s"):format(tostring(Value)))
+        Rayfield:Notify({ Title = "Particles", Content = Value and "Disabled" or "Enabled", Duration = 2 })
     end
 })
 
-VisualsTab:CreateSection("Character")
-
-VisualsTab:CreateButton({
-    Name = "Reset Character",
-    Callback = function()
-        LocalPlayer:LoadCharacter()
-        print("[Void] [Button] Reset Character")
-        Rayfield:Notify({ Title = "Character Reset", Content = "Your character has been reset.", Duration = 3, Image = "refresh-cw" })
-    end
-})
-
-VisualsTab:CreateSection("Camera")
-
-VisualsTab:CreateSlider({
-    Name = "Camera Zoom Max",
-    Range = {10, 500},
-    Increment = 10,
-    CurrentValue = 400,
-    Callback = SliderCallback("Camera Zoom Max", function(Value)
-        LocalPlayer.CameraMaxZoomDistance = Value
+GraphicsTab:CreateSlider({
+    Name         = "Render Distance (FogEnd)",
+    Range        = {100, 100000},
+    Increment    = 100,
+    CurrentValue = math.min(DefaultLighting.FogEnd, 100000),
+    Callback     = SliderCallback("Render Distance", function(Value)
+        Lighting.FogEnd = Value
     end)
 })
 
--- ────────────────────────────────────────────────────────────────
--- Done
--- ────────────────────────────────────────────────────────────────
+GraphicsTab:CreateSection("FPS")
 
-print("[Void] Script loaded successfully")
+GraphicsTab:CreateButton({
+    Name = "Unlock FPS (999)",
+    Callback = function()
+        pcall(function() setfpscap(999) end)
+        Rayfield:Notify({ Title = "FPS Unlocked", Content = "FPS cap removed (set to 999).", Duration = 2 })
+    end
+})
+
+local FPSCapSlider = GraphicsTab:CreateSlider({
+    Name         = "FPS Cap",
+    Range        = {30, 240},
+    Increment    = 10,
+    CurrentValue = 60,
+    Callback     = SliderCallback("FPS Cap", function(Value)
+        pcall(function() setfpscap(Value) end)
+    end)
+})
+
+GraphicsTab:CreateButton({
+    Name = "Reset FPS Cap (60)",
+    Callback = function()
+        pcall(function() setfpscap(60) end)
+        FPSCapSlider:Set(60)
+        Rayfield:Notify({ Title = "FPS Cap Reset", Content = "FPS cap set to 60.", Duration = 2 })
+    end
+})
+
+GraphicsTab:CreateButton({
+    Name = "Delete Terrain",
+    Callback = function()
+        if WS.Terrain then WS.Terrain:Clear() end
+        Rayfield:Notify({ Title = "Terrain Cleared", Content = "All terrain has been deleted.", Duration = 3 })
+    end
+})
+
+GraphicsTab:CreateButton({
+    Name = "Remove Textures",
+    Callback = function()
+        for _, o in pairs(WS:GetDescendants()) do
+            if o:IsA("Decal") or o:IsA("Texture") then
+                o.Transparency = 1
+            elseif o:IsA("BasePart") then
+                o.Material = Enum.Material.SmoothPlastic
+            end
+        end
+        Rayfield:Notify({ Title = "Textures Removed", Content = "All textures cleared.", Duration = 3 })
+    end
+})
+
+-- ════════════════════════════════════════════════════════════════
+-- DONE
+-- ════════════════════════════════════════════════════════════════
+
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print(" Void Universal — Loaded!")
+print((" Platform: %s"):format(IsMobile and "Mobile" or "PC"))
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print(" Tabs: Aim | Movement | Target | Visuals | Graphics")
+if not IsMobile then print(" Press P to toggle UI") end
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 Rayfield:Notify({
-    Title = "Void Loaded",
-    Content = "Enjoy your script!",
-    Duration = 4.5,
-    Image = "moon"
+    Title    = "Void Universal Loaded",
+    Content  = IsMobile and "Mobile mode active — use on-screen buttons!" or "All features ready. Press P to toggle UI.",
+    Duration = 5,
 })
