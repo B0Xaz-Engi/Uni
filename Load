@@ -391,9 +391,34 @@ end
 -- AIMBOT INPUT (PC keybinds)
 -- ────────────────────────────────────────────────────────────────
 
--- Debounce to prevent rapid lock/unlock spam from breaking state
-local aimDebounce = false
-local AIM_DEBOUNCE_TIME = 0.08  -- seconds between allowed lock toggles
+-- How many frames to skip after locking before we start moving the mouse.
+-- This lets any in-flight mousemoverel calls from the previous lock flush out
+-- so they don't carry over and cause the camera to snap/spin on re-lock.
+local AIM_SETTLE_FRAMES = 3
+local aimSettleCounter  = 0   -- counts down; >0 means skip this frame
+local aimLocked         = false  -- single source of truth for "are we aiming"
+
+local function LockOn()
+    local target = GetClosestPlayerToMouse()
+    if target then
+        -- Clear any residual state first
+        getgenv().VoidAimState.PlayerTarget = nil
+        aimLocked = false
+        -- Wait one frame so the render loop sees nil before we set the new target
+        task.defer(function()
+            getgenv().VoidAimState.PlayerTarget = target
+            aimSettleCounter = AIM_SETTLE_FRAMES  -- skip first N frames to flush pipeline
+            aimLocked = true
+        end)
+    end
+end
+
+local function LockOff()
+    aimLocked = false
+    getgenv().VoidAimState.PlayerTarget = nil
+    getgenv().VoidAimState.HoldActive   = false
+    aimSettleCounter = 0
+end
 
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
@@ -401,20 +426,17 @@ TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
     if IsMobile then return end
     local key = GetKeyCode(getgenv().Aimbot.Keybind)
     if not key or input.KeyCode ~= key then return end
-    if aimDebounce then return end
 
     if getgenv().Aimbot.LockMode == "Hold" then
-        getgenv().VoidAimState.HoldActive   = true
-        getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
+        getgenv().VoidAimState.HoldActive = true
+        LockOn()
     else
-        -- Toggle: debounced so spamming can't corrupt state
-        aimDebounce = true
-        if getgenv().VoidAimState.PlayerTarget then
-            getgenv().VoidAimState.PlayerTarget = nil
+        -- Toggle
+        if aimLocked then
+            LockOff()
         else
-            getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
+            LockOn()
         end
-        task.delay(AIM_DEBOUNCE_TIME, function() aimDebounce = false end)
     end
 end))
 
@@ -423,8 +445,7 @@ TrackConnection(UserInputService.InputEnded:Connect(function(input)
     local key = GetKeyCode(getgenv().Aimbot.Keybind)
     if not key or input.KeyCode ~= key then return end
     if getgenv().Aimbot.LockMode == "Hold" then
-        getgenv().VoidAimState.HoldActive   = false
-        getgenv().VoidAimState.PlayerTarget = nil
+        LockOff()
     end
 end))
 
@@ -432,36 +453,40 @@ end))
 -- AIMBOT RENDER LOOP
 -- ────────────────────────────────────────────────────────────────
 
--- Minimum pixel distance before we move the mouse — prevents micro-jitter
--- when already nearly on target (main cause of Hold mode spasm)
-local AIM_DEADZONE = 2.0  -- pixels
+local AIM_DEADZONE = 1.5   -- pixels — skip frames where we're already on target
+local AIM_MAX_STEP = 150   -- pixels — max movement per frame, prevents initial snap
 
 TrackConnection(RunService.RenderStepped:Connect(function()
     local state = getgenv().VoidAimState
     if not getgenv().Aimbot.Status then return end
     if not state.PlayerTarget then return end
 
-    -- Validate target is still alive and in the game
+    -- Settle: skip N frames after a new lock so in-flight deltas flush out
+    if aimSettleCounter > 0 then
+        aimSettleCounter = aimSettleCounter - 1
+        return
+    end
+
+    -- Validate target still exists and is alive
     local targetPlayer = state.PlayerTarget
     if not targetPlayer or not targetPlayer.Parent then
-        state.PlayerTarget = nil
+        LockOff()
         return
     end
 
     local char = targetPlayer.Character
     if not char or not char.Parent then
-        state.PlayerTarget = nil
+        LockOff()
         return
     end
 
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then
-        -- Target died — auto-clear
-        state.PlayerTarget = nil
+        LockOff()
         return
     end
 
-    -- Pick hit part (air vs ground)
+    -- Pick hit part
     local partName = getgenv().Aimbot.Hitpart
     if hum.FloorMaterial == Enum.Material.Air then
         partName = getgenv().Aimbot.AirHitpart
@@ -469,14 +494,14 @@ TrackConnection(RunService.RenderStepped:Connect(function()
     local hitpart = char:FindFirstChild(partName) or char:FindFirstChild("HumanoidRootPart")
     if not hitpart then return end
 
-    -- Predict position
+    -- Predicted position
     local predPos = hitpart.Position + hitpart.Velocity * Vector3.new(
         getgenv().Aimbot.Prediction.Horizontal,
         getgenv().Aimbot.Prediction.Vertical,
         getgenv().Aimbot.Prediction.Horizontal
     )
 
-    -- Optional shake (applied after prediction)
+    -- Optional shake
     if getgenv().Aimbot.ShakeIntensity and getgenv().Aimbot.ShakeIntensity > 0 then
         local s = getgenv().Aimbot.ShakeIntensity / 10
         predPos = predPos + Vector3.new(
@@ -486,34 +511,29 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         )
     end
 
-    -- Check target is in front of camera (positive Z means behind camera)
+    -- Must be in front of camera
     local screenPos, onScreen = camera:WorldToViewportPoint(predPos)
     if not onScreen or screenPos.Z <= 0 then return end
 
     local mousePos = UserInputService:GetMouseLocation()
     local rawDelta = Vector2.new(screenPos.X, screenPos.Y) - mousePos
 
-    -- Deadzone: skip tiny corrections that cause jitter/spasm
+    -- Already on target — nothing to do
     if rawDelta.Magnitude < AIM_DEADZONE then return end
 
-    -- Apply smoothness
+    -- Smooth then clamp
     local delta = rawDelta / math.max(getgenv().Aimbot.Smoothness, 0.1)
-
-    -- Clamp max per-frame movement to prevent single-frame snap/spasm
-    -- especially important for Hold mode on fast target acquisition
-    local maxStep = 200
-    if delta.Magnitude > maxStep then
-        delta = delta.Unit * maxStep
+    if delta.Magnitude > AIM_MAX_STEP then
+        delta = delta.Unit * AIM_MAX_STEP
     end
 
     local ok = pcall(function()
         mousemoverel(delta.X, delta.Y)
     end)
     if not ok then
-        -- Fallback: CFrame lerp
         local smoothFactor = math.min(1, 1 / math.max(getgenv().Aimbot.Smoothness, 1))
         local targetCFrame = CFrame.new(camera.CFrame.Position, predPos)
-        camera.CFrame      = camera.CFrame:Lerp(targetCFrame, smoothFactor)
+        camera.CFrame = camera.CFrame:Lerp(targetCFrame, smoothFactor)
     end
 end))
 
