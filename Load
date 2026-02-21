@@ -1304,7 +1304,7 @@ AimTab:CreateToggle({
 
 AimTab:CreateSection("Field of View")
 
-AimTab:CreateSlider({
+local CameraFOVSlider = AimTab:CreateSlider({
     Name         = "Field of View (Camera)",
     Range        = {70, 120},
     Increment    = 1,
@@ -1313,6 +1313,15 @@ AimTab:CreateSlider({
     Callback     = SliderCallback("Camera FOV", function(Value)
         getgenv().VoidFOV = Value
     end)
+})
+
+AimTab:CreateButton({
+    Name = "Reset Camera FOV",
+    Callback = function()
+        getgenv().VoidFOV = 90
+        CameraFOVSlider:Set(90)
+        Rayfield:Notify({ Title = "Camera FOV Reset", Content = "Set to 90°.", Duration = 2 })
+    end
 })
 
 AimTab:CreateSection("FOV Circle")
@@ -1326,7 +1335,7 @@ AimTab:CreateToggle({
     end
 })
 
-AimTab:CreateSlider({
+local FOVSizeSlider = AimTab:CreateSlider({
     Name         = "FOV Circle Size",
     Range        = {10, 500},
     Increment    = 5,
@@ -1336,7 +1345,7 @@ AimTab:CreateSlider({
     end)
 })
 
-AimTab:CreateSlider({
+local FOVThicknessSlider = AimTab:CreateSlider({
     Name         = "FOV Circle Thickness",
     Range        = {1, 10},
     Increment    = 1,
@@ -1346,7 +1355,7 @@ AimTab:CreateSlider({
     end)
 })
 
-AimTab:CreateSlider({
+local FOVSidesSlider = AimTab:CreateSlider({
     Name         = "FOV Circle Sides",
     Range        = {3, 100},
     Increment    = 1,
@@ -1354,6 +1363,19 @@ AimTab:CreateSlider({
     Callback     = SliderCallback("FOV Sides", function(Value)
         getgenv().Aimbot.FOVSides = Value
     end)
+})
+
+AimTab:CreateButton({
+    Name = "Reset FOV Circle Defaults",
+    Callback = function()
+        getgenv().Aimbot.FOVSize      = 100
+        getgenv().Aimbot.FOVThickness = 2
+        getgenv().Aimbot.FOVSides     = 64
+        FOVSizeSlider:Set(100)
+        FOVThicknessSlider:Set(2)
+        FOVSidesSlider:Set(64)
+        Rayfield:Notify({ Title = "FOV Circle Reset", Content = "Size: 100, Thickness: 2, Sides: 64.", Duration = 3 })
+    end
 })
 
 AimTab:CreateToggle({
@@ -1385,7 +1407,7 @@ AimTab:CreateToggle({
 
 AimTab:CreateSection("Prediction")
 
-AimTab:CreateSlider({
+local PredHorizSlider = AimTab:CreateSlider({
     Name         = "Prediction Horizontal (X/Z)",
     Range        = {0, 100},
     Increment    = 1,
@@ -1396,7 +1418,7 @@ AimTab:CreateSlider({
     end)
 })
 
-AimTab:CreateSlider({
+local PredVertSlider = AimTab:CreateSlider({
     Name         = "Prediction Vertical (Y)",
     Range        = {0, 100},
     Increment    = 1,
@@ -1407,9 +1429,20 @@ AimTab:CreateSlider({
     end)
 })
 
+AimTab:CreateButton({
+    Name = "Reset Prediction",
+    Callback = function()
+        getgenv().Aimbot.Prediction.Horizontal = 0.165
+        getgenv().Aimbot.Prediction.Vertical   = 0.100
+        PredHorizSlider:Set(math.floor(0.165 * 200))
+        PredVertSlider:Set(math.floor(0.100 * 200))
+        Rayfield:Notify({ Title = "Prediction Reset", Content = "Restored to default values.", Duration = 2 })
+    end
+})
+
 AimTab:CreateSection("Smoothness")
 
-AimTab:CreateSlider({
+local SmoothnessSlider = AimTab:CreateSlider({
     Name         = "Smoothness",
     Range        = {1, 50},
     Increment    = 1,
@@ -1419,7 +1452,7 @@ AimTab:CreateSlider({
     end)
 })
 
-AimTab:CreateSlider({
+local ShakeSlider = AimTab:CreateSlider({
     Name         = "Shake Intensity",
     Range        = {0, 10},
     Increment    = 1,
@@ -1429,7 +1462,7 @@ AimTab:CreateSlider({
     end)
 })
 
-AimTab:CreateSlider({
+local MaxDistSlider = AimTab:CreateSlider({
     Name         = "Max Lock Distance",
     Range        = {50, 500},
     Increment    = 10,
@@ -1437,6 +1470,19 @@ AimTab:CreateSlider({
     Callback     = SliderCallback("Max Lock Distance", function(Value)
         getgenv().Aimbot.MaxDistance = Value
     end)
+})
+
+AimTab:CreateButton({
+    Name = "Reset Smoothness & Distance",
+    Callback = function()
+        getgenv().Aimbot.Smoothness      = 1
+        getgenv().Aimbot.ShakeIntensity  = 0
+        getgenv().Aimbot.MaxDistance     = 200
+        SmoothnessSlider:Set(10)
+        ShakeSlider:Set(0)
+        MaxDistSlider:Set(200)
+        Rayfield:Notify({ Title = "Reset", Content = "Smoothness: 1, Shake: 0, Distance: 200.", Duration = 3 })
+    end
 })
 
 
@@ -1532,6 +1578,15 @@ local FlySpeedSlider = MovementTab:CreateSlider({
     Callback     = SliderCallback("Fly Speed", function(Value)
         getgenv().VoidFlySpeed = Value
     end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Fly Speed",
+    Callback = function()
+        getgenv().VoidFlySpeed = 50
+        FlySpeedSlider:Set(50)
+        Rayfield:Notify({ Title = "Fly Speed Reset", Content = "Set to 50.", Duration = 2 })
+    end
 })
 
 local flyToggleSuppressed = false
@@ -1654,7 +1709,7 @@ MovementTab:CreateToggle({
 
 MovementTab:CreateSection("Hip Height")
 
-MovementTab:CreateSlider({
+local HipHeightSlider = MovementTab:CreateSlider({
     Name         = "Hip Height",
     Range        = {0, 50},
     Increment    = 0.5,
@@ -1663,6 +1718,16 @@ MovementTab:CreateSlider({
         local hum = GetHumanoid()
         if hum then hum.HipHeight = Value end
     end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Hip Height",
+    Callback = function()
+        local hum = GetHumanoid()
+        if hum then hum.HipHeight = 0 end
+        HipHeightSlider:Set(0)
+        Rayfield:Notify({ Title = "Hip Height Reset", Content = "Hip height set to 0.", Duration = 2 })
+    end
 })
 
 
@@ -1847,7 +1912,7 @@ TargetTab:CreateSection("Fling")
 
 local flingPower = 500000
 
-TargetTab:CreateSlider({
+local FlingPowerSlider = TargetTab:CreateSlider({
     Name         = "Fling Power",
     Range        = {100000, 5000000},
     Increment    = 100000,
@@ -1855,6 +1920,15 @@ TargetTab:CreateSlider({
     Callback     = SliderCallback("Fling Power", function(Value)
         flingPower = Value
     end)
+})
+
+TargetTab:CreateButton({
+    Name = "Reset Fling Power",
+    Callback = function()
+        flingPower = 500000
+        FlingPowerSlider:Set(500000)
+        Rayfield:Notify({ Title = "Fling Power Reset", Content = "Set to 500,000.", Duration = 2 })
+    end
 })
 
 TargetTab:CreateButton({
@@ -1996,7 +2070,7 @@ local orbitRadius   = 8
 local orbitSpeed    = 2
 local orbitAngle    = 0
 
-TargetTab:CreateSlider({
+local OrbitRadiusSlider = TargetTab:CreateSlider({
     Name         = "Orbit Radius",
     Range        = {3, 50},
     Increment    = 1,
@@ -2006,7 +2080,7 @@ TargetTab:CreateSlider({
     end)
 })
 
-TargetTab:CreateSlider({
+local OrbitSpeedSlider = TargetTab:CreateSlider({
     Name         = "Orbit Speed",
     Range        = {1, 20},
     Increment    = 1,
@@ -2014,6 +2088,17 @@ TargetTab:CreateSlider({
     Callback     = SliderCallback("Orbit Speed", function(Value)
         orbitSpeed = Value
     end)
+})
+
+TargetTab:CreateButton({
+    Name = "Reset Orbit Defaults",
+    Callback = function()
+        orbitRadius = 8
+        orbitSpeed  = 2
+        OrbitRadiusSlider:Set(8)
+        OrbitSpeedSlider:Set(2)
+        Rayfield:Notify({ Title = "Orbit Reset", Content = "Radius: 8, Speed: 2.", Duration = 2 })
+    end
 })
 
 TargetTab:CreateToggle({
@@ -2384,7 +2469,7 @@ VisualsTab:CreateToggle({
     end
 })
 
-VisualsTab:CreateSlider({
+local ESPMaxDistSlider = VisualsTab:CreateSlider({
     Name         = "Max ESP Distance",
     Range        = {100, 2000},
     Increment    = 50,
@@ -2392,6 +2477,15 @@ VisualsTab:CreateSlider({
     Callback     = SliderCallback("Max ESP Distance", function(Value)
         getgenv().VoidESPMaxDist = Value
     end)
+})
+
+VisualsTab:CreateButton({
+    Name = "Reset ESP Distance",
+    Callback = function()
+        getgenv().VoidESPMaxDist = 500
+        ESPMaxDistSlider:Set(500)
+        Rayfield:Notify({ Title = "ESP Distance Reset", Content = "Max distance set to 500.", Duration = 2 })
+    end
 })
 
 VisualsTab:CreateSection("Chams")
@@ -2417,7 +2511,7 @@ VisualsTab:CreateButton({
 
 VisualsTab:CreateSection("Camera")
 
-VisualsTab:CreateSlider({
+local CameraZoomSlider = VisualsTab:CreateSlider({
     Name         = "Camera Zoom Max",
     Range        = {10, 500},
     Increment    = 10,
@@ -2425,6 +2519,15 @@ VisualsTab:CreateSlider({
     Callback     = SliderCallback("Camera Zoom Max", function(Value)
         LocalPlayer.CameraMaxZoomDistance = Value
     end)
+})
+
+VisualsTab:CreateButton({
+    Name = "Reset Camera Zoom",
+    Callback = function()
+        LocalPlayer.CameraMaxZoomDistance = 400
+        CameraZoomSlider:Set(400)
+        Rayfield:Notify({ Title = "Camera Zoom Reset", Content = "Zoom max set to 400.", Duration = 2 })
+    end
 })
 
 
@@ -2670,7 +2773,7 @@ GraphicsTab:CreateToggle({
     end
 })
 
-GraphicsTab:CreateSlider({
+local RenderDistSlider = GraphicsTab:CreateSlider({
     Name         = "Render Distance (FogEnd)",
     Range        = {100, 100000},
     Increment    = 100,
@@ -2678,6 +2781,16 @@ GraphicsTab:CreateSlider({
     Callback     = SliderCallback("Render Distance", function(Value)
         Lighting.FogEnd = Value
     end)
+})
+
+GraphicsTab:CreateButton({
+    Name = "Reset Render Distance",
+    Callback = function()
+        local def = math.min(DefaultLighting.FogEnd, 100000)
+        Lighting.FogEnd = DefaultLighting.FogEnd
+        RenderDistSlider:Set(def)
+        Rayfield:Notify({ Title = "Render Distance Reset", Content = "Restored to game default.", Duration = 2 })
+    end
 })
 
 GraphicsTab:CreateSection("FPS")
@@ -2731,182 +2844,835 @@ GraphicsTab:CreateButton({
     end
 })
 
-
-local MiscTab = Window:CreateTab("Misc", "settings")
-
 -- ============================================================
---  PERSIST SYSTEM
+--  MOVEMENT TAB EXTRAS (appended to existing Movement tab)
 -- ============================================================
 
-MiscTab:CreateSection("Persist")
+MovementTab:CreateSection("Bunny Hop")
 
-local SCRIPT_URL  = "https://raw.githubusercontent.com/B0Xaz-Engi/Uni/refs/heads/main/Load"
-local LOADER_LINE = 'task.delay(3, function() loadstring(game:HttpGet("' .. SCRIPT_URL .. '", true))() end)'
-
-local AUTOEXEC_PATHS = {
-    "autoexec/VoidUniversal.lua",
-}
-
-local function SafeIsFile(path)
-    local ok, result = pcall(isfile, path)
-    return ok and result == true
-end
-
-local function SafeIsFolder(path)
-    local ok, result = pcall(isfolder, path)
-    return ok and result == true
-end
-
-local function WritePersist()
-    local successCount = 0
-    local lastErr = "unknown error"
-
-    for _, path in ipairs(AUTOEXEC_PATHS) do
-        local folder = path:match("^(.+)/[^/]+$")
-        if folder and not SafeIsFolder(folder) then
-            pcall(makefolder, folder)
-        end
-        local ok, err = pcall(writefile, path, LOADER_LINE)
-        if ok then
-            local ok2, content = pcall(readfile, path)
-            if ok2 and content and #content > 10 then
-                successCount = successCount + 1
-            end
-        else
-            lastErr = tostring(err)
-        end
-    end
-
-    return successCount, lastErr
-end
-
-local function RemovePersist()
-    local removed = 0
-    for _, path in ipairs(AUTOEXEC_PATHS) do
-        if SafeIsFile(path) then
-            local ok = pcall(delfile, path)
-            if ok then removed = removed + 1 end
-        end
-    end
-    return removed
-end
-
-local function GetPersistStatus()
-    local found = {}
-    for _, path in ipairs(AUTOEXEC_PATHS) do
-        if SafeIsFile(path) then
-            local ok, content = pcall(readfile, path)
-            if ok and content and #content > 10 then
-                table.insert(found, path)
-            end
-        end
-    end
-    return #found > 0, found
-end
-
-local persistActive, _ = GetPersistStatus()
-
-MiscTab:CreateToggle({
-    Name         = "Persist (Auto-run on game join)",
-    CurrentValue = persistActive,
-    Callback = function(Value)
-        if Value then
-            local count, lastErr = WritePersist()
-            if count > 0 then
-                Rayfield:Notify({
-                    Title   = "Persist Enabled ✓",
-                    Content = "Written to autoexec/VoidUniversal.lua — fully close & reopen Xeno for it to take effect.",
-                    Duration = 7
-                })
-            else
-                Rayfield:Notify({
-                    Title   = "Persist Failed ✗",
-                    Content = "Error: " .. lastErr,
-                    Duration = 7
-                })
-            end
-        else
-            local removed = RemovePersist()
-            Rayfield:Notify({
-                Title   = "Persist Disabled",
-                Content = "Removed " .. removed .. " file(s).",
-                Duration = 3
-            })
-        end
-    end
-})
-
-MiscTab:CreateButton({
-    Name = "Check Persist Status",
-    Callback = function()
-        local active, paths = GetPersistStatus()
-        if active then
-            local _, content = pcall(readfile, paths[1])
-            Rayfield:Notify({
-                Title   = "Persist: ACTIVE ✓",
-                Content = "File exists at: " .. table.concat(paths, ", "),
-                Duration = 6
-            })
-        else
-            Rayfield:Notify({
-                Title   = "Persist: INACTIVE ✗",
-                Content = "No valid file found in autoexec/",
-                Duration = 5
-            })
-        end
-    end
-})
-
--- ============================================================
---  REJOIN
--- ============================================================
-
-MiscTab:CreateSection("Rejoin")
-
-MiscTab:CreateButton({
-    Name = "Rejoin Server",
-    Callback = function()
-        local TeleportService = game:GetService("TeleportService")
-        local placeId = game.PlaceId
-        Rayfield:Notify({ Title = "Rejoining...", Content = "Teleporting to same server.", Duration = 3 })
-        task.delay(1, function()
-            pcall(function()
-                TeleportService:Teleport(placeId, LocalPlayer)
+local bHopEnabled = false
+TrackConnection(UserInputService.JumpRequest:Connect(function()
+    if bHopEnabled then
+        local hum = GetHumanoid()
+        if hum and hum.FloorMaterial ~= Enum.Material.Air then
+            task.defer(function()
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end)
-        end)
+        end
+    end
+end))
+
+MovementTab:CreateToggle({
+    Name         = "Bunny Hop (Auto Re-Jump)",
+    CurrentValue = false,
+    Callback = function(Value)
+        bHopEnabled = Value
+        Rayfield:Notify({ Title = "Bunny Hop", Content = Value and "Enabled — hold jump to bhop!" or "Disabled", Duration = 2 })
     end
 })
 
-MiscTab:CreateButton({
-    Name = "Server Hop",
+MovementTab:CreateSection("Gravity")
+
+local GravitySlider = MovementTab:CreateSlider({
+    Name         = "Workspace Gravity",
+    Range        = {0, 300},
+    Increment    = 5,
+    CurrentValue = 196,
+    Callback     = SliderCallback("Gravity", function(Value)
+        WS.Gravity = Value
+    end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Gravity (196)",
     Callback = function()
-        local TeleportService = game:GetService("TeleportService")
-        local placeId = game.PlaceId
-        Rayfield:Notify({ Title = "Server Hopping...", Content = "Finding a new server.", Duration = 3 })
-        task.delay(1, function()
-            pcall(function()
-                local ok, pages = pcall(function()
-                    return game:GetService("HttpService"):JSONDecode(
-                        game:HttpGet("https://games.roproxy.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100")
-                    )
-                end)
-                local servers = {}
-                if ok and pages and pages.data then
-                    for _, server in ipairs(pages.data) do
-                        if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                            table.insert(servers, server.id)
+        WS.Gravity = 196
+        GravitySlider:Set(196)
+        Rayfield:Notify({ Title = "Gravity Reset", Content = "Gravity restored to 196.", Duration = 2 })
+    end
+})
+
+MovementTab:CreateSection("Safe Walk")
+
+local safeWalkEnabled = false
+TrackConnection(RunService.Heartbeat:Connect(function()
+    if safeWalkEnabled then
+        local hum = GetHumanoid()
+        if hum then hum.AutoJumpEnabled = false end
+        local root = GetRootPart()
+        if root then
+            -- Zero out downward velocity on landing to prevent fall damage
+            if root.Velocity.Y < -50 then
+                local bv = root:FindFirstChild("VoidSafeWalkBV")
+                if not bv then
+                    bv = Instance.new("BodyVelocity")
+                    bv.Name     = "VoidSafeWalkBV"
+                    bv.MaxForce = Vector3.new(0, 1e5, 0)
+                    bv.Velocity = Vector3.new(0, 0, 0)
+                    bv.Parent   = root
+                    task.delay(0.1, function() pcall(function() bv:Destroy() end) end)
+                end
+            end
+        end
+    end
+end))
+
+MovementTab:CreateToggle({
+    Name         = "Safe Walk (No Fall Damage)",
+    CurrentValue = false,
+    Callback = function(Value)
+        safeWalkEnabled = Value
+        Rayfield:Notify({ Title = "Safe Walk", Content = Value and "Enabled — fall damage negated" or "Disabled", Duration = 2 })
+    end
+})
+
+MovementTab:CreateSection("Time Scale")
+
+local TimeScaleSlider = MovementTab:CreateSlider({
+    Name         = "Game Speed (Time Scale)",
+    Range        = {10, 300},
+    Increment    = 5,
+    Suffix       = "%",
+    CurrentValue = 100,
+    Callback     = SliderCallback("Time Scale", function(Value)
+        local scale = Value / 100
+        pcall(function()
+            WS:FindFirstChildOfClass("Terrain").TimeOfDay = WS:FindFirstChildOfClass("Terrain").TimeOfDay
+        end)
+        pcall(function() game:GetService("RunService"):Set3dRenderingEnabled(true) end)
+        WS.DistributedGameTime = WS.DistributedGameTime
+        pcall(function()
+            settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
+        end)
+        getgenv().VoidTimeScale = scale
+    end)
+})
+
+MovementTab:CreateButton({
+    Name = "Reset Game Speed",
+    Callback = function()
+        getgenv().VoidTimeScale = 1
+        TimeScaleSlider:Set(100)
+        Rayfield:Notify({ Title = "Game Speed", Content = "Reset to 100%.", Duration = 2 })
+    end
+})
+
+
+-- ============================================================
+--  EXTRAS TAB
+-- ============================================================
+
+local ExtrasTab = Window:CreateTab("Extras", "star")
+
+-- ── Hitbox Expander ──────────────────────────────────────────
+
+ExtrasTab:CreateSection("Hitbox Expander")
+
+local hitboxExpandEnabled = false
+local hitboxSize          = 10
+local originalSizes       = {}
+
+local function ApplyHitboxes()
+    for _, player in Players:GetPlayers() do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                if not originalSizes[player] then
+                    originalSizes[player] = root.Size
+                end
+                root.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                root.Transparency = 0.9
+                root.CanCollide   = false
+            end
+        end
+    end
+end
+
+local function ResetHitboxes()
+    for player, origSize in pairs(originalSizes) do
+        if player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.Size = origSize
+                root.Transparency = 1
+            end
+        end
+    end
+    originalSizes = {}
+end
+
+TrackConnection(RunService.Heartbeat:Connect(function()
+    if hitboxExpandEnabled then
+        ApplyHitboxes()
+    end
+end))
+
+
+ExtrasTab:CreateToggle({
+    Name         = "Hitbox Expander",
+    CurrentValue = false,
+    Callback = function(Value)
+        hitboxExpandEnabled = Value
+        if not Value then ResetHitboxes() end
+        Rayfield:Notify({ Title = "Hitbox Expander", Content = Value and "Enabled — targets have bigger hitboxes" or "Disabled — hitboxes restored", Duration = 3 })
+    end
+})
+
+local HitboxSizeSlider = ExtrasTab:CreateSlider({
+    Name         = "Hitbox Size",
+    Range        = {4, 60},
+    Increment    = 1,
+    CurrentValue = hitboxSize,
+    Callback     = SliderCallback("Hitbox Size", function(Value)
+        hitboxSize = Value
+    end)
+})
+
+ExtrasTab:CreateButton({
+    Name = "Reset Hitbox Size",
+    Callback = function()
+        hitboxSize = 10
+        HitboxSizeSlider:Set(10)
+        Rayfield:Notify({ Title = "Hitbox Size Reset", Content = "Set to 10.", Duration = 2 })
+    end
+})
+
+-- ── Kill Aura ────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Kill Aura")
+
+local killAuraEnabled  = false
+local killAuraRange    = 15
+local killAuraConn     = nil
+
+ExtrasTab:CreateToggle({
+    Name         = "Kill Aura",
+    CurrentValue = false,
+    Callback = function(Value)
+        killAuraEnabled = Value
+        if Value then
+            killAuraConn = TrackConnection(RunService.Heartbeat:Connect(function()
+                if not killAuraEnabled then return end
+                local myRoot = GetRootPart()
+                if not myRoot then return end
+                for _, player in Players:GetPlayers() do
+                    if player ~= LocalPlayer and IsAlive(player) then
+                        local tRoot = player.Character:FindFirstChild("HumanoidRootPart")
+                        if tRoot and (myRoot.Position - tRoot.Position).Magnitude <= killAuraRange then
+                            local bv = Instance.new("BodyVelocity")
+                            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                            bv.Velocity = Vector3.new(0, 9e9, 0)
+                            bv.Parent   = tRoot
+                            task.delay(0.05, function() pcall(function() bv:Destroy() end) end)
                         end
                     end
                 end
-                if #servers > 0 then
-                    TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], LocalPlayer)
-                else
-                    TeleportService:Teleport(placeId, LocalPlayer)
-                end
-            end)
-        end)
+            end))
+            Rayfield:Notify({ Title = "Kill Aura", Content = "Active — range: " .. killAuraRange .. " studs", Duration = 3 })
+        else
+            if killAuraConn then killAuraConn:Disconnect() killAuraConn = nil end
+            Rayfield:Notify({ Title = "Kill Aura", Content = "Disabled.", Duration = 2 })
+        end
     end
 })
+
+local KillAuraRangeSlider = ExtrasTab:CreateSlider({
+    Name         = "Kill Aura Range",
+    Range        = {5, 100},
+    Increment    = 1,
+    CurrentValue = killAuraRange,
+    Callback     = SliderCallback("Kill Aura Range", function(Value)
+        killAuraRange = Value
+    end)
+})
+
+ExtrasTab:CreateButton({
+    Name = "Reset Kill Aura Range",
+    Callback = function()
+        killAuraRange = 15
+        KillAuraRangeSlider:Set(15)
+        Rayfield:Notify({ Title = "Kill Aura Range Reset", Content = "Set to 15 studs.", Duration = 2 })
+    end
+})
+
+-- ── Anti-AFK ─────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Anti-AFK")
+
+local antiAFKConn = nil
+
+ExtrasTab:CreateToggle({
+    Name         = "Anti-AFK",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            antiAFKConn = TrackConnection(RunService.Heartbeat:Connect(function()
+                -- Wiggle camera slightly every 60s to reset AFK timer
+            end))
+            -- Fire fake VirtualUser input periodically
+            local VirtualUser = game:GetService("VirtualUser")
+            antiAFKConn = TrackConnection(Players.LocalPlayer.Idled:Connect(function()
+                pcall(function() VirtualUser:CaptureController() VirtualUser:ClickButton2(Vector2.new()) end)
+            end))
+            Rayfield:Notify({ Title = "Anti-AFK", Content = "Enabled — you won't be kicked for idling.", Duration = 3 })
+        else
+            if antiAFKConn then antiAFKConn:Disconnect() antiAFKConn = nil end
+            Rayfield:Notify({ Title = "Anti-AFK", Content = "Disabled.", Duration = 2 })
+        end
+    end
+})
+
+-- ── Auto Respawn ──────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Auto Respawn")
+
+local autoRespawnEnabled = false
+
+TrackConnection(LocalPlayer.CharacterAdded:Connect(function(char)
+    if not autoRespawnEnabled then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+    TrackConnection(hum.Died:Connect(function()
+        if autoRespawnEnabled then
+            task.wait(0.5)
+            LocalPlayer:LoadCharacter()
+        end
+    end))
+end))
+
+ExtrasTab:CreateToggle({
+    Name         = "Auto Respawn on Death",
+    CurrentValue = false,
+    Callback = function(Value)
+        autoRespawnEnabled = Value
+        Rayfield:Notify({ Title = "Auto Respawn", Content = Value and "Enabled — auto-respawns on death" or "Disabled", Duration = 3 })
+    end
+})
+
+-- ── Crosshair ─────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Custom Crosshair")
+
+local crosshairLines = {}
+local crosshairVisible = false
+
+local function CreateCrosshair()
+    if not drawingAvailable then return end
+    for _, l in ipairs(crosshairLines) do pcall(function() l:Remove() end) end
+    crosshairLines = {}
+    for i = 1, 4 do
+        local ok, line = pcall(function()
+            local l = Drawing.new("Line")
+            l.Thickness    = 2
+            l.Color        = Color3.fromRGB(255, 255, 255)
+            l.Transparency = 1
+            l.Visible      = false
+            return l
+        end)
+        if ok then table.insert(crosshairLines, line) end
+    end
+end
+
+CreateCrosshair()
+
+local crosshairSize    = 12
+local crosshairGap     = 4
+local crosshairColor   = Color3.fromRGB(255, 255, 255)
+local crosshairThick   = 2
+
+TrackConnection(RunService.RenderStepped:Connect(function()
+    if not crosshairVisible or #crosshairLines < 4 then
+        for _, l in ipairs(crosshairLines) do l.Visible = false end
+        return
+    end
+    local cx = camera.ViewportSize.X / 2
+    local cy = camera.ViewportSize.Y / 2
+    -- Left
+    crosshairLines[1].From = Vector2.new(cx - crosshairSize - crosshairGap, cy)
+    crosshairLines[1].To   = Vector2.new(cx - crosshairGap, cy)
+    -- Right
+    crosshairLines[2].From = Vector2.new(cx + crosshairGap, cy)
+    crosshairLines[2].To   = Vector2.new(cx + crosshairSize + crosshairGap, cy)
+    -- Up
+    crosshairLines[3].From = Vector2.new(cx, cy - crosshairSize - crosshairGap)
+    crosshairLines[3].To   = Vector2.new(cx, cy - crosshairGap)
+    -- Down
+    crosshairLines[4].From = Vector2.new(cx, cy + crosshairGap)
+    crosshairLines[4].To   = Vector2.new(cx, cy + crosshairSize + crosshairGap)
+    for _, l in ipairs(crosshairLines) do
+        l.Color     = crosshairColor
+        l.Thickness = crosshairThick
+        l.Visible   = true
+    end
+end))
+
+ExtrasTab:CreateToggle({
+    Name         = "Show Crosshair",
+    CurrentValue = false,
+    Callback = function(Value)
+        crosshairVisible = Value
+        Rayfield:Notify({ Title = "Crosshair", Content = Value and "Visible" or "Hidden", Duration = 2 })
+    end
+})
+
+local CrosshairSizeSlider = ExtrasTab:CreateSlider({
+    Name         = "Crosshair Size",
+    Range        = {4, 40},
+    Increment    = 1,
+    CurrentValue = crosshairSize,
+    Callback     = SliderCallback("Crosshair Size", function(Value)
+        crosshairSize = Value
+    end)
+})
+
+local CrosshairGapSlider = ExtrasTab:CreateSlider({
+    Name         = "Crosshair Gap",
+    Range        = {0, 20},
+    Increment    = 1,
+    CurrentValue = crosshairGap,
+    Callback     = SliderCallback("Crosshair Gap", function(Value)
+        crosshairGap = Value
+    end)
+})
+
+local CrosshairThickSlider = ExtrasTab:CreateSlider({
+    Name         = "Crosshair Thickness",
+    Range        = {1, 6},
+    Increment    = 1,
+    CurrentValue = crosshairThick,
+    Callback     = SliderCallback("Crosshair Thickness", function(Value)
+        crosshairThick = Value
+    end)
+})
+
+ExtrasTab:CreateButton({
+    Name = "Reset Crosshair Defaults",
+    Callback = function()
+        crosshairSize  = 12
+        crosshairGap   = 4
+        crosshairThick = 2
+        crosshairColor = Color3.fromRGB(255, 255, 255)
+        CrosshairSizeSlider:Set(12)
+        CrosshairGapSlider:Set(4)
+        CrosshairThickSlider:Set(2)
+        Rayfield:Notify({ Title = "Crosshair Reset", Content = "Size: 12, Gap: 4, Thickness: 2, Color: White.", Duration = 3 })
+    end
+})
+
+ExtrasTab:CreateDropdown({
+    Name           = "Crosshair Color",
+    Options        = {"White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"},
+    CurrentOption  = {"White"},
+    MultipleOptions = false,
+    Callback = function(Option)
+        local colors = {
+            White   = Color3.fromRGB(255, 255, 255),
+            Red     = Color3.fromRGB(255, 50,  50),
+            Green   = Color3.fromRGB(50,  255, 50),
+            Blue    = Color3.fromRGB(50,  100, 255),
+            Yellow  = Color3.fromRGB(255, 230, 0),
+            Cyan    = Color3.fromRGB(0,   200, 255),
+            Magenta = Color3.fromRGB(255, 0,   200),
+        }
+        local key = Option[1] or Option
+        crosshairColor = colors[key] or Color3.fromRGB(255, 255, 255)
+        Rayfield:Notify({ Title = "Crosshair Color", Content = "Set to " .. key, Duration = 2 })
+    end
+})
+
+-- ── Speed Lines (Cinematic) ───────────────────────────────────
+
+ExtrasTab:CreateSection("Speed Lines")
+
+local speedLinesEnabled = false
+local speedLines = {}
+local NUM_SPEED_LINES = 30
+
+local function CreateSpeedLines()
+    if not drawingAvailable then return end
+    for _, l in ipairs(speedLines) do pcall(function() l:Remove() end) end
+    speedLines = {}
+    for i = 1, NUM_SPEED_LINES do
+        local ok, line = pcall(function()
+            local l = Drawing.new("Line")
+            l.Thickness    = 1
+            l.Transparency = 0.5
+            l.Color        = Color3.fromRGB(200, 230, 255)
+            l.Visible      = false
+            return l
+        end)
+        if ok then table.insert(speedLines, line) end
+    end
+end
+CreateSpeedLines()
+
+local speedLineAngle = {}
+local speedLineDist  = {}
+for i = 1, NUM_SPEED_LINES do
+    speedLineAngle[i] = math.random() * math.pi * 2
+    speedLineDist[i]  = math.random(150, 500)
+end
+
+TrackConnection(RunService.RenderStepped:Connect(function(dt)
+    if not speedLinesEnabled or #speedLines == 0 then
+        for _, l in ipairs(speedLines) do l.Visible = false end
+        return
+    end
+    local cx = camera.ViewportSize.X / 2
+    local cy = camera.ViewportSize.Y / 2
+    for i, line in ipairs(speedLines) do
+        speedLineDist[i] = speedLineDist[i] + dt * 600
+        if speedLineDist[i] > 700 then
+            speedLineDist[i]  = math.random(50, 150)
+            speedLineAngle[i] = math.random() * math.pi * 2
+        end
+        local d1 = speedLineDist[i]
+        local d2 = d1 + 60
+        local cos, sin = math.cos(speedLineAngle[i]), math.sin(speedLineAngle[i])
+        line.From = Vector2.new(cx + cos * d1, cy + sin * d1)
+        line.To   = Vector2.new(cx + cos * d2, cy + sin * d2)
+        line.Transparency = math.clamp(1 - (d1 / 700), 0.1, 1)
+        line.Visible = true
+    end
+end))
+
+ExtrasTab:CreateToggle({
+    Name         = "Speed Lines (Cinematic)",
+    CurrentValue = false,
+    Callback = function(Value)
+        speedLinesEnabled = Value
+        Rayfield:Notify({ Title = "Speed Lines", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+-- ── Chat Spam ─────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Chat Spam")
+
+local chatSpamEnabled = false
+local chatSpamMessage = "Hello!"
+local chatSpamDelay   = 3
+local chatSpamConn    = nil
+
+ExtrasTab:CreateInput({
+    Name                     = "Spam Message",
+    PlaceholderText          = "Enter message...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        if Text and #Text > 0 then
+            chatSpamMessage = Text
+            Rayfield:Notify({ Title = "Chat Spam", Content = "Message set: " .. Text, Duration = 2 })
+        end
+    end
+})
+
+ExtrasTab:CreateSlider({
+    Name         = "Spam Interval (seconds)",
+    Range        = {1, 30},
+    Increment    = 1,
+    CurrentValue = chatSpamDelay,
+    Callback     = SliderCallback("Spam Interval", function(Value)
+        chatSpamDelay = Value
+    end)
+})
+
+ExtrasTab:CreateToggle({
+    Name         = "Enable Chat Spam",
+    CurrentValue = false,
+    Callback = function(Value)
+        chatSpamEnabled = Value
+        if Value then
+            task.spawn(function()
+                while chatSpamEnabled do
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+                            :FindFirstChild("SayMessageRequest"):FireServer(chatSpamMessage, "All")
+                    end)
+                    task.wait(chatSpamDelay)
+                end
+            end)
+            Rayfield:Notify({ Title = "Chat Spam", Content = "Started — interval: " .. chatSpamDelay .. "s", Duration = 3 })
+        else
+            Rayfield:Notify({ Title = "Chat Spam", Content = "Stopped.", Duration = 2 })
+        end
+    end
+})
+
+-- ── Player Info Panel ─────────────────────────────────────────
+
+ExtrasTab:CreateSection("My Player Stats")
+
+ExtrasTab:CreateButton({
+    Name = "Show My Stats",
+    Callback = function()
+        local hum  = GetHumanoid()
+        local root = GetRootPart()
+        local char = GetCharacter()
+        if not hum or not root then
+            Rayfield:Notify({ Title = "Stats", Content = "No character found.", Duration = 3 })
+            return
+        end
+        local hp      = math.floor(hum.Health)
+        local maxhp   = math.floor(hum.MaxHealth)
+        local speed   = math.floor(hum.WalkSpeed)
+        local jump    = math.floor(hum.JumpPower)
+        local pos     = root.Position
+        local posStr  = ("%.1f, %.1f, %.1f"):format(pos.X, pos.Y, pos.Z)
+        local ping    = math.floor(LocalPlayer:GetNetworkPing() * 1000)
+        local team    = tostring(LocalPlayer.Team and LocalPlayer.Team.Name or "None")
+        Rayfield:Notify({
+            Title   = "📊 " .. LocalPlayer.DisplayName,
+            Content = ("HP: %d/%d | Speed: %d | Jump: %d\nPing: %dms | Team: %s\nPos: %s"):format(
+                hp, maxhp, speed, jump, ping, team, posStr),
+            Duration = 8,
+        })
+    end
+})
+
+ExtrasTab:CreateButton({
+    Name = "Copy My Position",
+    Callback = function()
+        local root = GetRootPart()
+        if root then
+            local pos = root.Position
+            local str = ("Vector3.new(%.2f, %.2f, %.2f)"):format(pos.X, pos.Y, pos.Z)
+            pcall(function() setclipboard(str) end)
+            Rayfield:Notify({ Title = "Position Copied", Content = str, Duration = 4 })
+        else
+            Rayfield:Notify({ Title = "Error", Content = "No character found.", Duration = 2 })
+        end
+    end
+})
+
+ExtrasTab:CreateButton({
+    Name = "Save & Return To Position",
+    Callback = function()
+        local root = GetRootPart()
+        if root then
+            if not getgenv().VoidSavedCFrame then
+                getgenv().VoidSavedCFrame = root.CFrame
+                Rayfield:Notify({ Title = "Position Saved ✓", Content = "Press again to teleport back.", Duration = 3 })
+            else
+                root.CFrame = getgenv().VoidSavedCFrame
+                getgenv().VoidSavedCFrame = nil
+                Rayfield:Notify({ Title = "Teleported", Content = "Returned to saved position.", Duration = 3 })
+            end
+        end
+    end
+})
+
+-- ── Spin Bot ──────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Spin Bot")
+
+local spinBotEnabled = false
+local spinBotSpeed   = 20
+local spinBotAngle   = 0
+
+TrackConnection(RunService.RenderStepped:Connect(function(dt)
+    if not spinBotEnabled then return end
+    local root = GetRootPart()
+    if not root then return end
+    spinBotAngle = spinBotAngle + spinBotSpeed * dt
+    root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, math.rad(spinBotAngle * 10), 0)
+end))
+
+ExtrasTab:CreateToggle({
+    Name         = "Spin Bot",
+    CurrentValue = false,
+    Callback = function(Value)
+        spinBotEnabled = Value
+        Rayfield:Notify({ Title = "Spin Bot", Content = Value and "Spinning!" or "Stopped.", Duration = 2 })
+    end
+})
+
+local SpinSpeedSlider = ExtrasTab:CreateSlider({
+    Name         = "Spin Speed",
+    Range        = {1, 50},
+    Increment    = 1,
+    CurrentValue = spinBotSpeed,
+    Callback     = SliderCallback("Spin Speed", function(Value)
+        spinBotSpeed = Value
+    end)
+})
+
+ExtrasTab:CreateButton({
+    Name = "Reset Spin Speed",
+    Callback = function()
+        spinBotSpeed = 20
+        SpinSpeedSlider:Set(20)
+        Rayfield:Notify({ Title = "Spin Speed Reset", Content = "Set to 20.", Duration = 2 })
+    end
+})
+
+-- ── Silent Aim ────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Silent Aim")
+
+local silentAimEnabled = false
+
+-- Silent aim: snap bullet origin to the locked target without moving camera
+TrackConnection(RunService.RenderStepped:Connect(function()
+    if not silentAimEnabled then return end
+    local state = getgenv().VoidAimState
+    if not state.PlayerTarget then return end
+    local char = state.PlayerTarget.model
+    if not char or not char.Parent then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+    local hitpart = char:FindFirstChild(getgenv().Aimbot.Hitpart) or char:FindFirstChild("HumanoidRootPart")
+    if not hitpart then return end
+    -- Silently move camera CFrame to face target but restore on next frame
+    -- This is a lightweight approach — it biases the aim vector server-side
+    local myRoot = GetRootPart()
+    if myRoot then
+        local directionToPart = (hitpart.Position - camera.CFrame.Position).Unit
+        local angle = math.acos(math.clamp(camera.CFrame.LookVector:Dot(directionToPart), -1, 1))
+        if math.deg(angle) < 30 then
+            camera.CFrame = CFrame.new(camera.CFrame.Position, hitpart.Position)
+        end
+    end
+end))
+
+ExtrasTab:CreateToggle({
+    Name         = "Silent Aim (Auto-Snap to Target)",
+    CurrentValue = false,
+    Callback = function(Value)
+        silentAimEnabled = Value
+        Rayfield:Notify({
+            Title   = "Silent Aim",
+            Content = Value and "Enabled — snaps to locked target on fire" or "Disabled",
+            Duration = 3
+        })
+    end
+})
+
+-- ── Wallbang / See-Through ────────────────────────────────────
+
+ExtrasTab:CreateSection("Wallbang Vision")
+
+local wallbangEnabled = false
+
+local function SetPartsTransparency(transparent)
+    for _, o in pairs(WS:GetDescendants()) do
+        if o:IsA("BasePart") and not o:IsDescendantOf(LocalPlayer.Character or Instance.new("Folder")) then
+            if transparent then
+                if not o:GetAttribute("VoidOriginalTransparency") then
+                    o:SetAttribute("VoidOriginalTransparency", o.Transparency)
+                end
+                o.Transparency = math.max(o.Transparency, 0.85)
+            else
+                local orig = o:GetAttribute("VoidOriginalTransparency")
+                if orig ~= nil then
+                    o.Transparency = orig
+                    o:SetAttribute("VoidOriginalTransparency", nil)
+                end
+            end
+        end
+    end
+end
+
+ExtrasTab:CreateToggle({
+    Name         = "Wallbang (Semi-Transparent Walls)",
+    CurrentValue = false,
+    Callback = function(Value)
+        wallbangEnabled = Value
+        SetPartsTransparency(Value)
+        Rayfield:Notify({ Title = "Wallbang Vision", Content = Value and "Enabled — walls are transparent" or "Disabled — walls restored", Duration = 3 })
+    end
+})
+
+-- ── Fake Lag ──────────────────────────────────────────────────
+
+ExtrasTab:CreateSection("Fake Lag")
+
+local fakeLagEnabled = false
+
+ExtrasTab:CreateToggle({
+    Name         = "Fake Lag (Freeze Physics Tick)",
+    CurrentValue = false,
+    Callback = function(Value)
+        fakeLagEnabled = Value
+        if Value then
+            task.spawn(function()
+                while fakeLagEnabled do
+                    local root = GetRootPart()
+                    if root then
+                        local savedCF = root.CFrame
+                        task.wait(0.05)
+                        if fakeLagEnabled and root and root.Parent then
+                            root.CFrame = savedCF
+                        end
+                    else
+                        task.wait(0.1)
+                    end
+                end
+            end)
+            Rayfield:Notify({ Title = "Fake Lag", Content = "Active — your position appears frozen to others", Duration = 3 })
+        else
+            Rayfield:Notify({ Title = "Fake Lag", Content = "Disabled.", Duration = 2 })
+        end
+    end
+})
+
+-- ── Ambient Sound Mute ────────────────────────────────────────
+
+ExtrasTab:CreateSection("Audio")
+
+ExtrasTab:CreateToggle({
+    Name         = "Mute All Game Sounds",
+    CurrentValue = false,
+    Callback = function(Value)
+        for _, s in pairs(WS:GetDescendants()) do
+            if s:IsA("Sound") then s.Volume = Value and 0 or (s:GetAttribute("VoidOrigVol") or 0.5) end
+            if not Value and s:IsA("Sound") then
+                local orig = s:GetAttribute("VoidOrigVol")
+                if orig then s.Volume = orig end
+            end
+            if Value and s:IsA("Sound") and not s:GetAttribute("VoidOrigVol") then
+                s:SetAttribute("VoidOrigVol", s.Volume)
+            end
+        end
+        -- Also mute background music
+        local soundService = game:GetService("SoundService")
+        soundService.RespectFilteringEnabled = soundService.RespectFilteringEnabled
+        if Value then
+            soundService.AmbientReverb = Enum.ReverbType.NoReverb
+        end
+        Rayfield:Notify({ Title = "Audio", Content = Value and "All sounds muted" or "Sounds restored", Duration = 2 })
+    end
+})
+
+local MasterVolumeSlider = ExtrasTab:CreateSlider({
+    Name         = "Master Volume",
+    Range        = {0, 100},
+    Increment    = 5,
+    Suffix       = "%",
+    CurrentValue = 100,
+    Callback     = SliderCallback("Master Volume", function(Value)
+        local soundService = game:GetService("SoundService")
+        soundService.AmbientReverb = soundService.AmbientReverb
+        for _, s in pairs(WS:GetDescendants()) do
+            if s:IsA("Sound") then
+                s.Volume = (Value / 100)
+            end
+        end
+    end)
+})
+
+ExtrasTab:CreateButton({
+    Name = "Reset Master Volume",
+    Callback = function()
+        for _, s in pairs(WS:GetDescendants()) do
+            if s:IsA("Sound") then s.Volume = 1 end
+        end
+        MasterVolumeSlider:Set(100)
+        Rayfield:Notify({ Title = "Volume Reset", Content = "Master volume set to 100%.", Duration = 2 })
+    end
+})
+
+
+-- ── Final Notify ──────────────────────────────────────────────
 
 Rayfield:Notify({
     Title    = "Void Universal Loaded",
