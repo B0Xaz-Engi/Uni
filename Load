@@ -2732,6 +2732,182 @@ GraphicsTab:CreateButton({
 })
 
 
+local MiscTab = Window:CreateTab("Misc", "settings")
+
+-- ============================================================
+--  PERSIST SYSTEM
+-- ============================================================
+
+MiscTab:CreateSection("Persist")
+
+local SCRIPT_URL  = "https://raw.githubusercontent.com/B0Xaz-Engi/Uni/refs/heads/main/Load"
+local LOADER_LINE = 'task.delay(3, function() loadstring(game:HttpGet("' .. SCRIPT_URL .. '", true))() end)'
+
+local AUTOEXEC_PATHS = {
+    "autoexec/VoidUniversal.lua",
+}
+
+local function SafeIsFile(path)
+    local ok, result = pcall(isfile, path)
+    return ok and result == true
+end
+
+local function SafeIsFolder(path)
+    local ok, result = pcall(isfolder, path)
+    return ok and result == true
+end
+
+local function WritePersist()
+    local successCount = 0
+    local lastErr = "unknown error"
+
+    for _, path in ipairs(AUTOEXEC_PATHS) do
+        local folder = path:match("^(.+)/[^/]+$")
+        if folder and not SafeIsFolder(folder) then
+            pcall(makefolder, folder)
+        end
+        local ok, err = pcall(writefile, path, LOADER_LINE)
+        if ok then
+            local ok2, content = pcall(readfile, path)
+            if ok2 and content and #content > 10 then
+                successCount = successCount + 1
+            end
+        else
+            lastErr = tostring(err)
+        end
+    end
+
+    return successCount, lastErr
+end
+
+local function RemovePersist()
+    local removed = 0
+    for _, path in ipairs(AUTOEXEC_PATHS) do
+        if SafeIsFile(path) then
+            local ok = pcall(delfile, path)
+            if ok then removed = removed + 1 end
+        end
+    end
+    return removed
+end
+
+local function GetPersistStatus()
+    local found = {}
+    for _, path in ipairs(AUTOEXEC_PATHS) do
+        if SafeIsFile(path) then
+            local ok, content = pcall(readfile, path)
+            if ok and content and #content > 10 then
+                table.insert(found, path)
+            end
+        end
+    end
+    return #found > 0, found
+end
+
+local persistActive, _ = GetPersistStatus()
+
+MiscTab:CreateToggle({
+    Name         = "Persist (Auto-run on game join)",
+    CurrentValue = persistActive,
+    Callback = function(Value)
+        if Value then
+            local count, lastErr = WritePersist()
+            if count > 0 then
+                Rayfield:Notify({
+                    Title   = "Persist Enabled ✓",
+                    Content = "Written to autoexec/VoidUniversal.lua — fully close & reopen Xeno for it to take effect.",
+                    Duration = 7
+                })
+            else
+                Rayfield:Notify({
+                    Title   = "Persist Failed ✗",
+                    Content = "Error: " .. lastErr,
+                    Duration = 7
+                })
+            end
+        else
+            local removed = RemovePersist()
+            Rayfield:Notify({
+                Title   = "Persist Disabled",
+                Content = "Removed " .. removed .. " file(s).",
+                Duration = 3
+            })
+        end
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Check Persist Status",
+    Callback = function()
+        local active, paths = GetPersistStatus()
+        if active then
+            local _, content = pcall(readfile, paths[1])
+            Rayfield:Notify({
+                Title   = "Persist: ACTIVE ✓",
+                Content = "File exists at: " .. table.concat(paths, ", "),
+                Duration = 6
+            })
+        else
+            Rayfield:Notify({
+                Title   = "Persist: INACTIVE ✗",
+                Content = "No valid file found in autoexec/",
+                Duration = 5
+            })
+        end
+    end
+})
+
+-- ============================================================
+--  REJOIN
+-- ============================================================
+
+MiscTab:CreateSection("Rejoin")
+
+MiscTab:CreateButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        local placeId = game.PlaceId
+        Rayfield:Notify({ Title = "Rejoining...", Content = "Teleporting to same server.", Duration = 3 })
+        task.delay(1, function()
+            pcall(function()
+                TeleportService:Teleport(placeId, LocalPlayer)
+            end)
+        end)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Server Hop",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        local placeId = game.PlaceId
+        Rayfield:Notify({ Title = "Server Hopping...", Content = "Finding a new server.", Duration = 3 })
+        task.delay(1, function()
+            pcall(function()
+                local ok, pages = pcall(function()
+                    return game:GetService("HttpService"):JSONDecode(
+                        game:HttpGet("https://games.roproxy.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100")
+                    )
+                end)
+                local servers = {}
+                if ok and pages and pages.data then
+                    for _, server in ipairs(pages.data) do
+                        if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                            table.insert(servers, server.id)
+                        end
+                    end
+                end
+                if #servers > 0 then
+                    TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], LocalPlayer)
+                else
+                    TeleportService:Teleport(placeId, LocalPlayer)
+                end
+            end)
+        end)
+    end
+})
+
 Rayfield:Notify({
     Title    = "Void Universal Loaded",
     Content  = IsMobile and "Mobile mode active — use on-screen buttons!" or "All features ready. Press P to toggle UI.",
