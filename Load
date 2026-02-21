@@ -1813,6 +1813,440 @@ TargetTab:CreateToggle({
 })
 
 
+TargetTab:CreateSection("Fling")
+
+local flingPower = 500000
+
+TargetTab:CreateSlider({
+    Name         = "Fling Power",
+    Range        = {100000, 5000000},
+    Increment    = 100000,
+    CurrentValue = flingPower,
+    Callback     = SliderCallback("Fling Power", function(Value)
+        flingPower = Value
+    end)
+})
+
+TargetTab:CreateButton({
+    Name = "Fling Selected",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "Fling", Content = "Select a player first.", Duration = 2 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        if not target or not target.Character then
+            Rayfield:Notify({ Title = "Fling", Content = "Target not found.", Duration = 2 })
+            return
+        end
+        local myRoot = GetRootPart()
+        local tRoot  = target.Character:FindFirstChild("HumanoidRootPart")
+        if not myRoot or not tRoot then return end
+        local originalCFrame = myRoot.CFrame
+        myRoot.CFrame = tRoot.CFrame
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(
+            math.random(-1, 1) * flingPower,
+            flingPower,
+            math.random(-1, 1) * flingPower
+        )
+        bv.Parent = tRoot
+        task.delay(0.1, function()
+            pcall(function() bv:Destroy() end)
+            myRoot.CFrame = originalCFrame
+        end)
+        Rayfield:Notify({ Title = "Flinged", Content = "Flung " .. SelectedPlayerName, Duration = 2 })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Fling Aim Target",
+    Callback = function()
+        local state = getgenv().VoidAimState
+        if not state.PlayerTarget then
+            Rayfield:Notify({ Title = "Fling", Content = "No aim target locked.", Duration = 2 })
+            return
+        end
+        local myRoot = GetRootPart()
+        local tRoot  = state.PlayerTarget.Character and state.PlayerTarget.Character:FindFirstChild("HumanoidRootPart")
+        if not myRoot or not tRoot then return end
+        local originalCFrame = myRoot.CFrame
+        myRoot.CFrame = tRoot.CFrame
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(
+            math.random(-1, 1) * flingPower,
+            flingPower,
+            math.random(-1, 1) * flingPower
+        )
+        bv.Parent = tRoot
+        task.delay(0.1, function()
+            pcall(function() bv:Destroy() end)
+            myRoot.CFrame = originalCFrame
+        end)
+        Rayfield:Notify({ Title = "Flinged", Content = "Flung " .. state.PlayerTarget.Name, Duration = 2 })
+    end
+})
+
+local loopFlingEnabled = false
+local loopFlingConn    = nil
+
+TargetTab:CreateToggle({
+    Name         = "Loop Fling Selected",
+    CurrentValue = false,
+    Callback = function(Value)
+        loopFlingEnabled = Value
+        if Value then
+            if not SelectedPlayerName then
+                Rayfield:Notify({ Title = "Loop Fling", Content = "Select a player first.", Duration = 2 })
+                loopFlingEnabled = false
+                return
+            end
+            loopFlingConn = TrackConnection(RunService.Heartbeat:Connect(function()
+                if not loopFlingEnabled then return end
+                local target = GetPlayerByName(SelectedPlayerName)
+                if not target or not IsAlive(target) then return end
+                local myRoot = GetRootPart()
+                local tRoot  = target.Character:FindFirstChild("HumanoidRootPart")
+                if not myRoot or not tRoot then return end
+                myRoot.CFrame = tRoot.CFrame
+                local bv = Instance.new("BodyVelocity")
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bv.Velocity = Vector3.new(math.random(-1,1)*flingPower, flingPower, math.random(-1,1)*flingPower)
+                bv.Parent = tRoot
+                task.delay(0.05, function() pcall(function() bv:Destroy() end) end)
+            end))
+            Rayfield:Notify({ Title = "Loop Fling", Content = "Looping fling on " .. SelectedPlayerName, Duration = 3 })
+        else
+            if loopFlingConn then loopFlingConn:Disconnect() loopFlingConn = nil end
+            local myRoot = GetRootPart()
+            if myRoot then myRoot.CFrame = myRoot.CFrame end
+            Rayfield:Notify({ Title = "Loop Fling", Content = "Stopped.", Duration = 2 })
+        end
+    end
+})
+
+TargetTab:CreateSection("Kill & Damage")
+
+TargetTab:CreateButton({
+    Name = "Kill Selected (Void Method)",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "Kill", Content = "Select a player first.", Duration = 2 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        if not target or not IsAlive(target) then
+            Rayfield:Notify({ Title = "Kill", Content = "Target not alive.", Duration = 2 })
+            return
+        end
+        local myRoot = GetRootPart()
+        local tRoot  = target.Character:FindFirstChild("HumanoidRootPart")
+        if not myRoot or not tRoot then return end
+        local saved = myRoot.CFrame
+        myRoot.CFrame = tRoot.CFrame
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(0, 9e9, 0)
+        bv.Parent = tRoot
+        task.delay(0.08, function()
+            pcall(function() bv:Destroy() end)
+            myRoot.CFrame = saved
+        end)
+        Rayfield:Notify({ Title = "Kill", Content = "Attempted kill on " .. SelectedPlayerName, Duration = 2 })
+    end
+})
+
+TargetTab:CreateSection("Orbit")
+
+local orbitEnabled  = false
+local orbitConn     = nil
+local orbitRadius   = 8
+local orbitSpeed    = 2
+local orbitAngle    = 0
+
+TargetTab:CreateSlider({
+    Name         = "Orbit Radius",
+    Range        = {3, 50},
+    Increment    = 1,
+    CurrentValue = orbitRadius,
+    Callback     = SliderCallback("Orbit Radius", function(Value)
+        orbitRadius = Value
+    end)
+})
+
+TargetTab:CreateSlider({
+    Name         = "Orbit Speed",
+    Range        = {1, 20},
+    Increment    = 1,
+    CurrentValue = orbitSpeed,
+    Callback     = SliderCallback("Orbit Speed", function(Value)
+        orbitSpeed = Value
+    end)
+})
+
+TargetTab:CreateToggle({
+    Name         = "Orbit Selected Player",
+    CurrentValue = false,
+    Callback = function(Value)
+        orbitEnabled = Value
+        if Value then
+            if not SelectedPlayerName then
+                Rayfield:Notify({ Title = "Orbit", Content = "Select a player first.", Duration = 2 })
+                orbitEnabled = false
+                return
+            end
+            orbitConn = TrackConnection(RunService.Heartbeat:Connect(function(dt)
+                if not orbitEnabled then return end
+                local target = GetPlayerByName(SelectedPlayerName)
+                local myRoot = GetRootPart()
+                if not target or not IsAlive(target) or not myRoot then return end
+                local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                if not tRoot then return end
+                orbitAngle = orbitAngle + (orbitSpeed * dt)
+                local x = tRoot.Position.X + math.cos(orbitAngle) * orbitRadius
+                local z = tRoot.Position.Z + math.sin(orbitAngle) * orbitRadius
+                local y = tRoot.Position.Y
+                myRoot.CFrame = CFrame.new(x, y, z) * CFrame.Angles(0, -orbitAngle - math.pi/2, 0)
+            end))
+            Rayfield:Notify({ Title = "Orbit", Content = "Orbiting " .. SelectedPlayerName, Duration = 3 })
+        else
+            if orbitConn then orbitConn:Disconnect() orbitConn = nil end
+            Rayfield:Notify({ Title = "Orbit", Content = "Stopped.", Duration = 2 })
+        end
+    end
+})
+
+TargetTab:CreateSection("Spectate")
+
+local spectateConn = nil
+
+TargetTab:CreateButton({
+    Name = "Spectate Selected",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "Spectate", Content = "Select a player first.", Duration = 2 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        if target and target.Character then
+            local hum = target.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                WS.CurrentCamera.CameraSubject = hum
+                WS.CurrentCamera.CameraType = Enum.CameraType.Follow
+                Rayfield:Notify({ Title = "Spectating", Content = "Now spectating " .. SelectedPlayerName, Duration = 3 })
+                return
+            end
+        end
+        Rayfield:Notify({ Title = "Spectate", Content = "Could not spectate target.", Duration = 2 })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Stop Spectating",
+    Callback = function()
+        local char = GetCharacter()
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            WS.CurrentCamera.CameraSubject = hum
+            WS.CurrentCamera.CameraType = Enum.CameraType.Custom
+        end
+        Rayfield:Notify({ Title = "Spectate", Content = "Returned to own camera.", Duration = 2 })
+    end
+})
+
+TargetTab:CreateSection("Annoy")
+
+local loopJumpEnabled = false
+local loopJumpConn    = nil
+
+TargetTab:CreateToggle({
+    Name         = "Loop Jump On Target",
+    CurrentValue = false,
+    Callback = function(Value)
+        loopJumpEnabled = Value
+        if Value then
+            if not SelectedPlayerName then
+                Rayfield:Notify({ Title = "Loop Jump", Content = "Select a player first.", Duration = 2 })
+                loopJumpEnabled = false
+                return
+            end
+            loopJumpConn = TrackConnection(RunService.Heartbeat:Connect(function()
+                if not loopJumpEnabled then return end
+                local target = GetPlayerByName(SelectedPlayerName)
+                local myRoot = GetRootPart()
+                if not target or not IsAlive(target) or not myRoot then return end
+                local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                if tRoot then
+                    myRoot.CFrame = tRoot.CFrame + Vector3.new(0, 3, 0)
+                end
+            end))
+            Rayfield:Notify({ Title = "Loop Jump", Content = "Jumping on " .. SelectedPlayerName, Duration = 3 })
+        else
+            if loopJumpConn then loopJumpConn:Disconnect() loopJumpConn = nil end
+            Rayfield:Notify({ Title = "Loop Jump", Content = "Stopped.", Duration = 2 })
+        end
+    end
+})
+
+local spinTargetEnabled = false
+local spinTargetConn    = nil
+local spinTargetAngle   = 0
+
+TargetTab:CreateToggle({
+    Name         = "Spin Around Target",
+    CurrentValue = false,
+    Callback = function(Value)
+        spinTargetEnabled = Value
+        if Value then
+            if not SelectedPlayerName then
+                Rayfield:Notify({ Title = "Spin", Content = "Select a player first.", Duration = 2 })
+                spinTargetEnabled = false
+                return
+            end
+            spinTargetConn = TrackConnection(RunService.Heartbeat:Connect(function(dt)
+                if not spinTargetEnabled then return end
+                local target = GetPlayerByName(SelectedPlayerName)
+                local myRoot = GetRootPart()
+                if not target or not IsAlive(target) or not myRoot then return end
+                local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                if not tRoot then return end
+                spinTargetAngle = spinTargetAngle + (10 * dt)
+                local x = tRoot.Position.X + math.cos(spinTargetAngle) * 2
+                local z = tRoot.Position.Z + math.sin(spinTargetAngle) * 2
+                myRoot.CFrame = CFrame.new(x, tRoot.Position.Y, z)
+            end))
+            Rayfield:Notify({ Title = "Spin", Content = "Spinning around " .. SelectedPlayerName, Duration = 3 })
+        else
+            if spinTargetConn then spinTargetConn:Disconnect() spinTargetConn = nil end
+            Rayfield:Notify({ Title = "Spin", Content = "Stopped.", Duration = 2 })
+        end
+    end
+})
+
+TargetTab:CreateSection("Freeze Target")
+
+local frozenTargets = {}
+
+TargetTab:CreateButton({
+    Name = "Freeze Selected",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "Freeze", Content = "Select a player first.", Duration = 2 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        if not target or not target.Character then
+            Rayfield:Notify({ Title = "Freeze", Content = "Target not found.", Duration = 2 })
+            return
+        end
+        local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if not tRoot then return end
+        if not frozenTargets[SelectedPlayerName] then
+            local bg = Instance.new("BodyGyro")
+            bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bg.D = 9e9
+            bg.CFrame = tRoot.CFrame
+            bg.Parent = tRoot
+            local bv2 = Instance.new("BodyVelocity")
+            bv2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv2.Velocity = Vector3.new(0, 0, 0)
+            bv2.Parent = tRoot
+            frozenTargets[SelectedPlayerName] = { bg = bg, bv = bv2 }
+            Rayfield:Notify({ Title = "Frozen", Content = "Frozen " .. SelectedPlayerName, Duration = 2 })
+        else
+            Rayfield:Notify({ Title = "Freeze", Content = SelectedPlayerName .. " is already frozen.", Duration = 2 })
+        end
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Unfreeze Selected",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "Unfreeze", Content = "Select a player first.", Duration = 2 })
+            return
+        end
+        if frozenTargets[SelectedPlayerName] then
+            pcall(function() frozenTargets[SelectedPlayerName].bg:Destroy() end)
+            pcall(function() frozenTargets[SelectedPlayerName].bv:Destroy() end)
+            frozenTargets[SelectedPlayerName] = nil
+            Rayfield:Notify({ Title = "Unfrozen", Content = "Unfroze " .. SelectedPlayerName, Duration = 2 })
+        else
+            Rayfield:Notify({ Title = "Unfreeze", Content = "Target is not frozen.", Duration = 2 })
+        end
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Unfreeze All",
+    Callback = function()
+        local count = 0
+        for name, data in pairs(frozenTargets) do
+            pcall(function() data.bg:Destroy() end)
+            pcall(function() data.bv:Destroy() end)
+            frozenTargets[name] = nil
+            count = count + 1
+        end
+        Rayfield:Notify({ Title = "Unfreeze All", Content = "Unfroze " .. count .. " player(s).", Duration = 2 })
+    end
+})
+
+TargetTab:CreateSection("Info")
+
+TargetTab:CreateButton({
+    Name = "Get Selected Player Info",
+    Callback = function()
+        if not SelectedPlayerName then
+            Rayfield:Notify({ Title = "Info", Content = "Select a player first.", Duration = 2 })
+            return
+        end
+        local target = GetPlayerByName(SelectedPlayerName)
+        if not target then
+            Rayfield:Notify({ Title = "Info", Content = "Player not found.", Duration = 2 })
+            return
+        end
+        local hum    = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
+        local health = hum and math.floor(hum.Health) or 0
+        local maxhp  = hum and math.floor(hum.MaxHealth) or 0
+        local myRoot = GetRootPart()
+        local tRoot  = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        local dist   = (myRoot and tRoot) and math.floor((myRoot.Position - tRoot.Position).Magnitude) or 0
+        local team   = tostring(target.Team and target.Team.Name or "None")
+        Rayfield:Notify({
+            Title   = target.DisplayName,
+            Content = ("HP: %d/%d | Dist: %d | Team: %s"):format(health, maxhp, dist, team),
+            Duration = 6
+        })
+    end
+})
+
+TargetTab:CreateButton({
+    Name = "Get Aim Target Info",
+    Callback = function()
+        local state = getgenv().VoidAimState
+        if not state.PlayerTarget then
+            Rayfield:Notify({ Title = "Info", Content = "No aim target locked.", Duration = 2 })
+            return
+        end
+        local target = state.PlayerTarget
+        local hum    = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
+        local health = hum and math.floor(hum.Health) or 0
+        local maxhp  = hum and math.floor(hum.MaxHealth) or 0
+        local myRoot = GetRootPart()
+        local tRoot  = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        local dist   = (myRoot and tRoot) and math.floor((myRoot.Position - tRoot.Position).Magnitude) or 0
+        local team   = tostring(target.Team and target.Team.Name or "None")
+        Rayfield:Notify({
+            Title   = target.DisplayName,
+            Content = ("HP: %d/%d | Dist: %d | Team: %s"):format(health, maxhp, dist, team),
+            Duration = 6
+        })
+    end
+})
+
+
 local VisualsTab = Window:CreateTab("Visuals", "eye")
 
 VisualsTab:CreateSection("Drawing ESP Master")
