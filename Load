@@ -391,22 +391,30 @@ end
 -- AIMBOT INPUT (PC keybinds)
 -- ────────────────────────────────────────────────────────────────
 
+-- Debounce to prevent rapid lock/unlock spam from breaking state
+local aimDebounce = false
+local AIM_DEBOUNCE_TIME = 0.08  -- seconds between allowed lock toggles
+
 TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if not getgenv().Aimbot.Status then return end
-    if IsMobile then return end  -- mobile uses on-screen button
+    if IsMobile then return end
     local key = GetKeyCode(getgenv().Aimbot.Keybind)
     if not key or input.KeyCode ~= key then return end
+    if aimDebounce then return end
 
     if getgenv().Aimbot.LockMode == "Hold" then
         getgenv().VoidAimState.HoldActive   = true
         getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
     else
+        -- Toggle: debounced so spamming can't corrupt state
+        aimDebounce = true
         if getgenv().VoidAimState.PlayerTarget then
             getgenv().VoidAimState.PlayerTarget = nil
         else
             getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
         end
+        task.delay(AIM_DEBOUNCE_TIME, function() aimDebounce = false end)
     end
 end))
 
@@ -424,35 +432,51 @@ end))
 -- AIMBOT RENDER LOOP
 -- ────────────────────────────────────────────────────────────────
 
+-- Minimum pixel distance before we move the mouse — prevents micro-jitter
+-- when already nearly on target (main cause of Hold mode spasm)
+local AIM_DEADZONE = 2.0  -- pixels
+
 TrackConnection(RunService.RenderStepped:Connect(function()
     local state = getgenv().VoidAimState
     if not getgenv().Aimbot.Status then return end
     if not state.PlayerTarget then return end
 
-    local char = state.PlayerTarget.Character
-    if not char then
+    -- Validate target is still alive and in the game
+    local targetPlayer = state.PlayerTarget
+    if not targetPlayer or not targetPlayer.Parent then
         state.PlayerTarget = nil
         return
     end
 
-    if getgenv().Aimbot.LockMode == "Toggle" and state.HoldActive then
-        state.HoldActive = false
+    local char = targetPlayer.Character
+    if not char or not char.Parent then
+        state.PlayerTarget = nil
+        return
     end
 
-    local hum      = char:FindFirstChildOfClass("Humanoid")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then
+        -- Target died — auto-clear
+        state.PlayerTarget = nil
+        return
+    end
+
+    -- Pick hit part (air vs ground)
     local partName = getgenv().Aimbot.Hitpart
-    if hum and hum.FloorMaterial == Enum.Material.Air then
+    if hum.FloorMaterial == Enum.Material.Air then
         partName = getgenv().Aimbot.AirHitpart
     end
-    local hitpart = char:FindFirstChild(partName)
+    local hitpart = char:FindFirstChild(partName) or char:FindFirstChild("HumanoidRootPart")
     if not hitpart then return end
 
+    -- Predict position
     local predPos = hitpart.Position + hitpart.Velocity * Vector3.new(
         getgenv().Aimbot.Prediction.Horizontal,
         getgenv().Aimbot.Prediction.Vertical,
         getgenv().Aimbot.Prediction.Horizontal
     )
 
+    -- Optional shake (applied after prediction)
     if getgenv().Aimbot.ShakeIntensity and getgenv().Aimbot.ShakeIntensity > 0 then
         local s = getgenv().Aimbot.ShakeIntensity / 10
         predPos = predPos + Vector3.new(
@@ -462,16 +486,32 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         )
     end
 
-    local screenPos = camera:WorldToViewportPoint(predPos)
-    local mousePos  = UserInputService:GetMouseLocation()
-    local delta     = Vector2.new(screenPos.X, screenPos.Y) - mousePos
-    delta           = delta / getgenv().Aimbot.Smoothness
+    -- Check target is in front of camera (positive Z means behind camera)
+    local screenPos, onScreen = camera:WorldToViewportPoint(predPos)
+    if not onScreen or screenPos.Z <= 0 then return end
+
+    local mousePos = UserInputService:GetMouseLocation()
+    local rawDelta = Vector2.new(screenPos.X, screenPos.Y) - mousePos
+
+    -- Deadzone: skip tiny corrections that cause jitter/spasm
+    if rawDelta.Magnitude < AIM_DEADZONE then return end
+
+    -- Apply smoothness
+    local delta = rawDelta / math.max(getgenv().Aimbot.Smoothness, 0.1)
+
+    -- Clamp max per-frame movement to prevent single-frame snap/spasm
+    -- especially important for Hold mode on fast target acquisition
+    local maxStep = 200
+    if delta.Magnitude > maxStep then
+        delta = delta.Unit * maxStep
+    end
 
     local ok = pcall(function()
         mousemoverel(delta.X, delta.Y)
     end)
     if not ok then
-        local smoothFactor = 1 / math.max(getgenv().Aimbot.Smoothness, 1)
+        -- Fallback: CFrame lerp
+        local smoothFactor = math.min(1, 1 / math.max(getgenv().Aimbot.Smoothness, 1))
         local targetCFrame = CFrame.new(camera.CFrame.Position, predPos)
         camera.CFrame      = camera.CFrame:Lerp(targetCFrame, smoothFactor)
     end
@@ -625,24 +665,27 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         if UserInputService:IsKeyDown(Enum.KeyCode.Space)      then move = move + Vector3.new(0, 1, 0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)  then move = move - Vector3.new(0, 1, 0) end
     else
-        -- Mobile: use thumbstick / default walk movement direction from camera + character
+        -- Mobile: use MoveDirection from humanoid (thumbstick/tilt input)
         local char = GetCharacter()
         if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
             local hum = char:FindFirstChildOfClass("Humanoid")
-            if hrp and hum then
+            if hum then
                 local moveDir = hum.MoveDirection
                 if moveDir.Magnitude > 0.1 then
-                    move = camera.CFrame.LookVector * moveDir.Z + camera.CFrame.RightVector * moveDir.X
+                    -- Project movement onto camera-relative axes
+                    local camFlat = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z).Unit
+                    local camRight = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z).Unit
+                    move = camFlat * -moveDir.Z + camRight * moveDir.X
                 end
             end
         end
-        -- Mobile fly up/down handled by mobile buttons (see MobileFlyUp/Down below)
+        -- Mobile fly up/down from on-screen hold buttons
         if getgenv().VoidMobileFlyUp   then move = move + Vector3.new(0, 1, 0) end
         if getgenv().VoidMobileFlyDown then move = move - Vector3.new(0, 1, 0) end
     end
 
-    flyBodyVelocity.Velocity = move.Magnitude > 0 and move.Unit * getgenv().VoidFlySpeed or Vector3.new(0, 0, 0)
+    -- Direct multiply, same as original — no Unit normalization (avoids nan on zero vector)
+    flyBodyVelocity.Velocity = move * getgenv().VoidFlySpeed
 end))
 
 -- ────────────────────────────────────────────────────────────────
