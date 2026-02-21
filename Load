@@ -137,6 +137,7 @@ getgenv().Aimbot = getgenv().Aimbot or {
     FOVSides    = 64,
     RainbowFOV  = false,
     PulseFOV    = false,
+    LockNPC     = false,
 }
 
 getgenv().VoidFOV          = getgenv().VoidFOV          or 90
@@ -305,11 +306,19 @@ local function GetKeyCode(keyStr)
     return ok and result or nil
 end
 
+local function IsPlayerCharacter(model)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character == model then return p end
+    end
+    return nil
+end
+
 local function GetClosestPlayerToMouse()
     local closestDist = math.huge
     local closest     = nil
     local myRoot      = GetRootPart()
     local myPos       = myRoot and myRoot.Position
+    local myChar      = GetCharacter()
 
     local targetPos
     if IsMobile then
@@ -318,27 +327,43 @@ local function GetClosestPlayerToMouse()
         targetPos = Vector2.new(Mouse.X, Mouse.Y)
     end
 
-    for _, player in Players:GetPlayers() do
-        if player ~= LocalPlayer and IsAlive(player) then
-            if not (getgenv().Aimbot.TeamCheck and SameTeam(player)) then
-                local char = player.Character
-                local part = char:FindFirstChild(getgenv().Aimbot.Hitpart) or char:FindFirstChild("HumanoidRootPart")
-                if part then
-                    if myPos and (myPos - part.Position).Magnitude > getgenv().Aimbot.MaxDistance then continue end
-                    local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
-                    if onScreen then
-                        local dist = (targetPos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-                        if dist < closestDist and dist <= getgenv().Aimbot.FOVSize then
-                            if not getgenv().Aimbot.VisCheck or IsVisible(part) then
-                                closestDist = dist
-                                closest     = player
-                            end
-                        end
-                    end
-                end
+    local function Evaluate(model, playerRef)
+        if model == myChar or not model.Parent then return end
+        local hum  = model:FindFirstChildOfClass("Humanoid")
+        local root = model:FindFirstChild("HumanoidRootPart")
+        if not hum or not root or hum.Health <= 0 then return end
+        if playerRef and getgenv().Aimbot.TeamCheck and SameTeam(playerRef) then return end
+        local part = model:FindFirstChild(getgenv().Aimbot.Hitpart) or root
+        if myPos and (myPos - part.Position).Magnitude > getgenv().Aimbot.MaxDistance then return end
+        local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+        if not onScreen then return end
+        local dist = (targetPos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+        if dist < closestDist and dist <= getgenv().Aimbot.FOVSize then
+            if not getgenv().Aimbot.VisCheck or IsVisible(part) then
+                closestDist = dist
+                local displayName = playerRef and (playerRef.DisplayName or playerRef.Name) or model.Name
+                closest = { model = model, player = playerRef, name = displayName }
             end
         end
     end
+
+    if getgenv().Aimbot.LockNPC then
+        for _, obj in ipairs(WS:GetDescendants()) do
+            if obj:IsA("Model") then
+                local playerRef = IsPlayerCharacter(obj)
+                if playerRef ~= LocalPlayer then
+                    Evaluate(obj, playerRef or nil)
+                end
+            end
+        end
+    else
+        for _, player in Players:GetPlayers() do
+            if player ~= LocalPlayer and player.Character then
+                Evaluate(player.Character, player)
+            end
+        end
+    end
+
     return closest
 end
 
@@ -409,18 +434,13 @@ TrackConnection(RunService.RenderStepped:Connect(function()
         return
     end
 
-    local targetPlayer = state.PlayerTarget
-    if not targetPlayer or not targetPlayer.Parent then
+    local targetData = state.PlayerTarget
+    if not targetData or not targetData.model or not targetData.model.Parent then
         LockOff()
         return
     end
 
-    local char = targetPlayer.Character
-    if not char or not char.Parent then
-        LockOff()
-        return
-    end
-
+    local char = targetData.model
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then
         LockOff()
@@ -1054,7 +1074,7 @@ local function CreateMobileGUI()
             getgenv().VoidAimState.PlayerTarget = GetClosestPlayerToMouse()
             if getgenv().VoidAimState.PlayerTarget then
                 lockBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 50)
-                lockBtn.Text = "🔓 " .. getgenv().VoidAimState.PlayerTarget.Name
+                lockBtn.Text = "🔓 " .. getgenv().VoidAimState.PlayerTarget.name
             end
         end
     end)
@@ -1269,6 +1289,16 @@ AimTab:CreateToggle({
     Callback = function(Value)
         getgenv().Aimbot.VisCheck = Value
         Rayfield:Notify({ Title = "Visibility Check", Content = Value and "Enabled" or "Disabled", Duration = 2 })
+    end
+})
+
+AimTab:CreateToggle({
+    Name         = "Lock NPCs / Mobs",
+    CurrentValue = getgenv().Aimbot.LockNPC,
+    Callback = function(Value)
+        getgenv().Aimbot.LockNPC = Value
+        LockOff()
+        Rayfield:Notify({ Title = "NPC Lock", Content = Value and "Enabled — locks onto any Humanoid" or "Disabled — players only", Duration = 3 })
     end
 })
 
@@ -1691,7 +1721,7 @@ TargetTab:CreateButton({
             end
         end
         Rayfield:Notify({
-            Title   = "Closest Player",
+            Title   = "Closest Target",
             Content = closestName .. " (" .. math.floor(closestDist) .. "px from center)",
             Duration = 4
         })
@@ -1703,15 +1733,15 @@ TargetTab:CreateButton({
     Callback = function()
         local state  = getgenv().VoidAimState
         local myRoot = GetRootPart()
-        if state.PlayerTarget and state.PlayerTarget.Character and myRoot then
-            local root = state.PlayerTarget.Character:FindFirstChild("HumanoidRootPart")
+        if state.PlayerTarget and myRoot then
+            local root = state.PlayerTarget.model:FindFirstChild("HumanoidRootPart")
             if root then
                 myRoot.CFrame = root.CFrame * CFrame.new(0, 0, 3)
-                Rayfield:Notify({ Title = "Teleported", Content = "Teleported to " .. state.PlayerTarget.Name, Duration = 3 })
+                Rayfield:Notify({ Title = "Teleported", Content = "Teleported to " .. state.PlayerTarget.name, Duration = 3 })
                 return
             end
         end
-        Rayfield:Notify({ Title = "No Aim Target", Content = "Lock onto a player with aimbot first.", Duration = 3 })
+        Rayfield:Notify({ Title = "No Aim Target", Content = "Lock onto a target with aimbot first.", Duration = 3 })
     end
 })
 
@@ -1720,10 +1750,10 @@ TargetTab:CreateButton({
     Callback = function()
         local state = getgenv().VoidAimState
         if state.PlayerTarget then
-            pcall(function() setclipboard(state.PlayerTarget.Name) end)
-            Rayfield:Notify({ Title = "Copied", Content = state.PlayerTarget.Name .. " copied to clipboard.", Duration = 3 })
+            pcall(function() setclipboard(state.PlayerTarget.name) end)
+            Rayfield:Notify({ Title = "Copied", Content = state.PlayerTarget.name .. " copied to clipboard.", Duration = 3 })
         else
-            Rayfield:Notify({ Title = "No Aim Target", Content = "Lock onto a player first.", Duration = 3 })
+            Rayfield:Notify({ Title = "No Aim Target", Content = "Lock onto a target first.", Duration = 3 })
         end
     end
 })
@@ -1869,7 +1899,7 @@ TargetTab:CreateButton({
             return
         end
         local myRoot = GetRootPart()
-        local tRoot  = state.PlayerTarget.Character and state.PlayerTarget.Character:FindFirstChild("HumanoidRootPart")
+        local tRoot  = state.PlayerTarget.model:FindFirstChild("HumanoidRootPart")
         if not myRoot or not tRoot then return end
         local originalCFrame = myRoot.CFrame
         myRoot.CFrame = tRoot.CFrame
@@ -1885,7 +1915,7 @@ TargetTab:CreateButton({
             pcall(function() bv:Destroy() end)
             myRoot.CFrame = originalCFrame
         end)
-        Rayfield:Notify({ Title = "Flinged", Content = "Flung " .. state.PlayerTarget.Name, Duration = 2 })
+        Rayfield:Notify({ Title = "Flinged", Content = "Flung " .. state.PlayerTarget.name, Duration = 2 })
     end
 })
 
@@ -2231,15 +2261,15 @@ TargetTab:CreateButton({
             return
         end
         local target = state.PlayerTarget
-        local hum    = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
+        local hum    = target.model:FindFirstChildOfClass("Humanoid")
         local health = hum and math.floor(hum.Health) or 0
         local maxhp  = hum and math.floor(hum.MaxHealth) or 0
         local myRoot = GetRootPart()
-        local tRoot  = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        local tRoot  = target.model:FindFirstChild("HumanoidRootPart")
         local dist   = (myRoot and tRoot) and math.floor((myRoot.Position - tRoot.Position).Magnitude) or 0
-        local team   = tostring(target.Team and target.Team.Name or "None")
+        local team   = target.player and tostring(target.player.Team and target.player.Team.Name or "None") or "NPC"
         Rayfield:Notify({
-            Title   = target.DisplayName,
+            Title   = target.name,
             Content = ("HP: %d/%d | Dist: %d | Team: %s"):format(health, maxhp, dist, team),
             Duration = 6
         })
